@@ -2,7 +2,6 @@
 ///
 /// Tests that verify BLND emissions are properly claimed from the Blend pool
 /// during epoch cycling and contribute to the reward pool.
-
 use super::testutils::{create_test_blendizzard, setup_test_env};
 use soroban_sdk::testutils::{Address as _, Ledger as _};
 use soroban_sdk::{vec, Address};
@@ -195,9 +194,9 @@ fn test_reserve_token_id_formula() {
 
     // Examples:
     let reserve_0_btoken = 0 * 2 + 1; // = 1 (suppliers of reserve 0)
-    let reserve_0_debt = 0 * 2 + 0;   // = 0 (borrowers of reserve 0)
+    let reserve_0_debt = 0 * 2 + 0; // = 0 (borrowers of reserve 0)
     let reserve_1_btoken = 1 * 2 + 1; // = 3 (suppliers of reserve 1)
-    let reserve_1_debt = 1 * 2 + 0;   // = 2 (borrowers of reserve 1)
+    let reserve_1_debt = 1 * 2 + 0; // = 2 (borrowers of reserve 1)
     let reserve_2_btoken = 2 * 2 + 1; // = 5 (suppliers of reserve 2)
 
     assert_eq!(reserve_0_btoken, 1);

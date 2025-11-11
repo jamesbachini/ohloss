@@ -66,10 +66,7 @@ pub fn create_test_blendizzard<'a>(env: &Env, admin: &Address) -> BlendizzardCli
 /// - BLND minted to contract for swap testing
 ///
 /// Use this for testing epoch cycling which requires actual swaps.
-pub fn create_blendizzard_with_soroswap<'a>(
-    env: &Env,
-    admin: &Address,
-) -> BlendizzardClient<'a> {
+pub fn create_blendizzard_with_soroswap<'a>(env: &Env, admin: &Address) -> BlendizzardClient<'a> {
     use super::fee_vault_utils::create_mock_vault;
     use super::soroswap_utils::{add_liquidity, create_factory, create_router, create_token};
 

@@ -2,7 +2,6 @@
 ///
 /// End-to-end tests using real Blend pools via BlendFixture to verify
 /// emissions claiming functionality. Follows the pattern from kalepail/fee-vault-v2.
-
 use super::blend_utils::{
     create_blend_fixture_with_tokens, create_blend_pool, EnvTestUtils, ONE_DAY_LEDGERS,
 };
@@ -30,9 +29,15 @@ fn test_minimal_emissions_claim() {
     let merry = Address::generate(&env);
 
     // Create Blend ecosystem - EXACTLY as fee-vault-v2 does
-    let blnd = env.register_stellar_asset_contract_v2(bombadil.clone()).address();
-    let usdc = env.register_stellar_asset_contract_v2(bombadil.clone()).address();
-    let xlm = env.register_stellar_asset_contract_v2(bombadil.clone()).address();
+    let blnd = env
+        .register_stellar_asset_contract_v2(bombadil.clone())
+        .address();
+    let usdc = env
+        .register_stellar_asset_contract_v2(bombadil.clone())
+        .address();
+    let xlm = env
+        .register_stellar_asset_contract_v2(bombadil.clone())
+        .address();
 
     let blnd_client = MockTokenClient::new(&env, &blnd);
     let usdc_client = MockTokenClient::new(&env, &usdc);
@@ -111,7 +116,10 @@ fn test_minimal_emissions_claim() {
 
     // Verify emissions claiming works after gulp_emissions() fix
     // Merry has a position in the pool, so should claim non-zero emissions
-    assert!(merry_emissions > 0, "Merry should claim non-zero emissions from pool");
+    assert!(
+        merry_emissions > 0,
+        "Merry should claim non-zero emissions from pool"
+    );
 
     // Fee-vault claim consistency (balance should match return value)
     assert_eq!(blnd_client.balance(&gandalf), claim_result);
@@ -246,8 +254,14 @@ fn test_epoch_cycle_with_real_blend_pool_emissions() {
     assert_eq!(blnd_client.balance(&claim_recipient), claimed_blnd);
 
     // Verify both methods claim non-zero emissions
-    assert!(pool_user_emissions > 0, "Direct pool user should claim non-zero emissions");
-    assert!(claimed_blnd > 0, "Fee-vault should claim non-zero emissions");
+    assert!(
+        pool_user_emissions > 0,
+        "Direct pool user should claim non-zero emissions"
+    );
+    assert!(
+        claimed_blnd > 0,
+        "Fee-vault should claim non-zero emissions"
+    );
 
     // Verify proportionality: pool_user deposited 200 USDC, fee-vault deposited 100 USDC
     // So pool_user should get roughly 2x the emissions (within 10% tolerance for rounding)
@@ -333,7 +347,10 @@ fn test_claim_emissions_from_multiple_reserves() {
 
     // Claim again should return same amount (emissions might be 0)
     let second_claim = fee_vault_client.claim_emissions(&reserve_token_ids, &admin);
-    assert_eq!(second_claim, 0, "Second claim should return 0 (already claimed)");
+    assert_eq!(
+        second_claim, 0,
+        "Second claim should return 0 (already claimed)"
+    );
 }
 
 // ============================================================================
@@ -500,7 +517,6 @@ fn test_real_blend_pool_vs_mock_vault() {
 /// This mirrors production behavior exactly.
 #[test]
 fn test_full_epoch_cycle_with_all_real_contracts() {
-
     let env = setup_test_env();
     env.mock_all_auths();
     env.set_default_info();
@@ -637,13 +653,17 @@ fn test_full_epoch_cycle_with_all_real_contracts() {
 
     // Claim emissions to fee-vault admin balance (this would normally happen via pool activity)
     // In production, emissions accumulate automatically, but we need to trigger it for tests
-    let claimed_emissions = fee_vault_client.claim_emissions(&reserve_token_ids, &fee_vault_client.address);
+    let claimed_emissions =
+        fee_vault_client.claim_emissions(&reserve_token_ids, &fee_vault_client.address);
 
     // With gulp_emissions(), we should now have non-zero emissions!
     // This is a major improvement from the 0-emissions issue
     if claimed_emissions > 0 {
         // Success! We're getting real emissions now
-        assert!(claimed_emissions > 0, "Should have claimed non-zero emissions after gulp_emissions()");
+        assert!(
+            claimed_emissions > 0,
+            "Should have claimed non-zero emissions after gulp_emissions()"
+        );
     }
 
     // ========================================================================
@@ -708,7 +728,10 @@ fn test_full_epoch_cycle_with_all_real_contracts() {
 
             // Just verify epoch didn't cycle if it failed
             let current_epoch = blendizzard.get_epoch(&None);
-            assert_eq!(current_epoch.epoch_number, 0, "Epoch should not have cycled on error");
+            assert_eq!(
+                current_epoch.epoch_number, 0,
+                "Epoch should not have cycled on error"
+            );
 
             // Skip remaining assertions since epoch didn't cycle
             return;

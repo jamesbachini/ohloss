@@ -85,7 +85,7 @@ pub struct GameEnded {
     pub session_id: u32,
     pub winner: Address,
     pub loser: Address,
-    pub fp_contributed: i128,  // Winner's FP that contributes to faction standings
+    pub fp_contributed: i128, // Winner's FP that contributes to faction standings
 }
 
 // ============================================================================
@@ -223,7 +223,13 @@ pub(crate) fn emit_epoch_cycled(
 }
 
 /// Emit rewards claimed event
-pub(crate) fn emit_rewards_claimed(env: &Env, user: &Address, epoch: u32, faction: u32, amount: i128) {
+pub(crate) fn emit_rewards_claimed(
+    env: &Env,
+    user: &Address,
+    epoch: u32,
+    faction: u32,
+    amount: i128,
+) {
     RewardsClaimed {
         user: user.clone(),
         epoch,

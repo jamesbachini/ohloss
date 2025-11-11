@@ -8,7 +8,6 @@
 /// - Verify faction standings are updated correctly
 ///
 /// This demonstrates the full game integration flow with a real contract.
-
 use super::fee_vault_utils::{create_mock_vault, MockVaultClient};
 use super::testutils::{create_blendizzard_contract, setup_test_env};
 use crate::BlendizzardClient;
@@ -24,11 +23,11 @@ use soroban_sdk::{vec, Address, Env};
 fn setup_number_guess_test<'a>(
     env: &'a Env,
 ) -> (
-    Address,                         // admin
-    Address,                         // number_guess_addr
-    NumberGuessContractClient<'a>,   // number_guess_client
-    MockVaultClient<'a>,             // mock_vault
-    BlendizzardClient<'a>,           // blendizzard
+    Address,                       // admin
+    Address,                       // number_guess_addr
+    NumberGuessContractClient<'a>, // number_guess_client
+    MockVaultClient<'a>,           // mock_vault
+    BlendizzardClient<'a>,         // blendizzard
 ) {
     let admin = Address::generate(env);
 
@@ -78,20 +77,15 @@ fn setup_number_guess_test<'a>(
 #[test]
 fn test_number_guess_game_integration() {
     let env = setup_test_env();
-    let (
-        _admin,
-        _number_guess_addr,
-        number_guess_client,
-        mock_vault,
-        blendizzard,
-    ) = setup_number_guess_test(&env);
+    let (_admin, _number_guess_addr, number_guess_client, mock_vault, blendizzard) =
+        setup_number_guess_test(&env);
 
     let player1 = Address::generate(&env);
     let player2 = Address::generate(&env);
 
     // Set vault balances for both players
     let p1_balance = 1000_0000000; // 1000 tokens
-    let p2_balance = 500_0000000;  // 500 tokens
+    let p2_balance = 500_0000000; // 500 tokens
     mock_vault.set_user_balance(&player1, &p1_balance);
     mock_vault.set_user_balance(&player2, &p2_balance);
 
@@ -102,24 +96,24 @@ fn test_number_guess_game_integration() {
     // Prepare wagers
     let session_id = 1u32;
     let wager1 = 100_0000000; // 100 FP
-    let wager2 = 50_0000000;  // 50 FP
+    let wager2 = 50_0000000; // 50 FP
 
     // Start game through number-guess contract
     // This will internally call Blendizzard to lock FP
-    let game_id = number_guess_client.start_game(
-        &session_id,
-        &player1,
-        &player2,
-        &wager1,
-        &wager2,
-    );
+    let game_id = number_guess_client.start_game(&session_id, &player1, &player2, &wager1, &wager2);
 
     // Verify FP is locked in Blendizzard
     let p1_epoch = blendizzard.get_epoch_player(&player1);
     let p2_epoch = blendizzard.get_epoch_player(&player2);
 
-    assert_eq!(p1_epoch.locked_fp, wager1, "Player 1 wager should be locked");
-    assert_eq!(p2_epoch.locked_fp, wager2, "Player 2 wager should be locked");
+    assert_eq!(
+        p1_epoch.locked_fp, wager1,
+        "Player 1 wager should be locked"
+    );
+    assert_eq!(
+        p2_epoch.locked_fp, wager2,
+        "Player 2 wager should be locked"
+    );
 
     // Both players make their guesses
     number_guess_client.make_guess(&game_id, &player1, &5);
@@ -130,7 +124,11 @@ fn test_number_guess_game_integration() {
 
     // Verify FP accounting after game
     let winner_epoch = blendizzard.get_epoch_player(&winner);
-    let loser = if winner == player1 { player2.clone() } else { player1.clone() };
+    let loser = if winner == player1 {
+        player2.clone()
+    } else {
+        player1.clone()
+    };
     let loser_epoch = blendizzard.get_epoch_player(&loser);
 
     // Winner's wager should be unlocked and contributed to faction
@@ -142,8 +140,7 @@ fn test_number_guess_game_integration() {
     // Winner's total_fp_contributed should increase by their wager
     let winner_wager = if winner == player1 { wager1 } else { wager2 };
     assert_eq!(
-        winner_epoch.total_fp_contributed,
-        winner_wager,
+        winner_epoch.total_fp_contributed, winner_wager,
         "Winner's FP contribution should equal their wager"
     );
 
@@ -153,8 +150,7 @@ fn test_number_guess_game_integration() {
 
     let faction_fp = epoch_info.faction_standings.get(winner_faction).unwrap();
     assert_eq!(
-        faction_fp,
-        winner_wager,
+        faction_fp, winner_wager,
         "Winner's faction FP should be updated"
     );
 }
@@ -162,13 +158,8 @@ fn test_number_guess_game_integration() {
 #[test]
 fn test_multiple_number_guess_games() {
     let env = setup_test_env();
-    let (
-        _admin,
-        _number_guess_addr,
-        number_guess_client,
-        mock_vault,
-        blendizzard,
-    ) = setup_number_guess_test(&env);
+    let (_admin, _number_guess_addr, number_guess_client, mock_vault, blendizzard) =
+        setup_number_guess_test(&env);
 
     // Create two pairs of players
     let player1 = Address::generate(&env);
@@ -218,7 +209,10 @@ fn test_multiple_number_guess_games() {
         }
     }
 
-    assert!(total_faction_fp >= wager, "Factions should have accumulated FP from games");
+    assert!(
+        total_faction_fp >= wager,
+        "Factions should have accumulated FP from games"
+    );
 }
 
 #[test]
@@ -277,13 +271,8 @@ fn test_game_can_be_removed_from_registry() {
 #[test]
 fn test_loser_fp_is_deducted() {
     let env = setup_test_env();
-    let (
-        _admin,
-        _number_guess_addr,
-        number_guess_client,
-        mock_vault,
-        blendizzard,
-    ) = setup_number_guess_test(&env);
+    let (_admin, _number_guess_addr, number_guess_client, mock_vault, blendizzard) =
+        setup_number_guess_test(&env);
 
     let player1 = Address::generate(&env);
     let player2 = Address::generate(&env);
@@ -307,26 +296,31 @@ fn test_loser_fp_is_deducted() {
     let winner = number_guess_client.reveal_winner(&game_id);
 
     // Get final FP after game
-    let loser = if winner == player1 { player2.clone() } else { player1.clone() };
+    let loser = if winner == player1 {
+        player2.clone()
+    } else {
+        player1.clone()
+    };
     let loser_after = blendizzard.get_epoch_player(&loser);
 
     // Loser should have lost their wager
-    assert_eq!(loser_after.locked_fp, 0, "Loser's FP should be unlocked after game");
+    assert_eq!(
+        loser_after.locked_fp, 0,
+        "Loser's FP should be unlocked after game"
+    );
 
     // Loser shouldn't have contributed FP (only winners contribute)
-    assert_eq!(loser_after.total_fp_contributed, 0, "Loser should have no FP contribution");
+    assert_eq!(
+        loser_after.total_fp_contributed, 0,
+        "Loser should have no FP contribution"
+    );
 }
 
 #[test]
 fn test_winner_fp_returned_loser_fp_spent() {
     let env = setup_test_env();
-    let (
-        _admin,
-        _number_guess_addr,
-        number_guess_client,
-        mock_vault,
-        blendizzard,
-    ) = setup_number_guess_test(&env);
+    let (_admin, _number_guess_addr, number_guess_client, mock_vault, blendizzard) =
+        setup_number_guess_test(&env);
 
     let player1 = Address::generate(&env);
     let player2 = Address::generate(&env);
@@ -364,22 +358,23 @@ fn test_winner_fp_returned_loser_fp_spent() {
     assert_eq!(loser_final.locked_fp, 0, "Loser FP should be unlocked");
 
     // Winner should have contribution recorded
-    assert_eq!(winner_final.total_fp_contributed, wager, "Winner should have contribution");
+    assert_eq!(
+        winner_final.total_fp_contributed, wager,
+        "Winner should have contribution"
+    );
 
     // Loser should have no contribution
-    assert_eq!(loser_final.total_fp_contributed, 0, "Loser should have no contribution");
+    assert_eq!(
+        loser_final.total_fp_contributed, 0,
+        "Loser should have no contribution"
+    );
 }
 
 #[test]
 fn test_asymmetric_wagers() {
     let env = setup_test_env();
-    let (
-        _admin,
-        _number_guess_addr,
-        number_guess_client,
-        mock_vault,
-        blendizzard,
-    ) = setup_number_guess_test(&env);
+    let (_admin, _number_guess_addr, number_guess_client, mock_vault, blendizzard) =
+        setup_number_guess_test(&env);
 
     let player1 = Address::generate(&env);
     let player2 = Address::generate(&env);
@@ -392,7 +387,7 @@ fn test_asymmetric_wagers() {
 
     // Different wagers
     let wager1 = 200_0000000; // Player1 wagers 200 FP
-    let wager2 = 50_0000000;  // Player2 wagers 50 FP
+    let wager2 = 50_0000000; // Player2 wagers 50 FP
 
     let session_id = 12u32;
 
@@ -402,8 +397,14 @@ fn test_asymmetric_wagers() {
     // Verify correct amounts are locked
     let p1_locked = blendizzard.get_epoch_player(&player1);
     let p2_locked = blendizzard.get_epoch_player(&player2);
-    assert_eq!(p1_locked.locked_fp, wager1, "Player1 should have 200 FP locked");
-    assert_eq!(p2_locked.locked_fp, wager2, "Player2 should have 50 FP locked");
+    assert_eq!(
+        p1_locked.locked_fp, wager1,
+        "Player1 should have 200 FP locked"
+    );
+    assert_eq!(
+        p2_locked.locked_fp, wager2,
+        "Player2 should have 50 FP locked"
+    );
 
     number_guess_client.make_guess(&game_id, &player1, &5);
     number_guess_client.make_guess(&game_id, &player2, &7);
@@ -417,10 +418,16 @@ fn test_asymmetric_wagers() {
         (player1.clone(), wager2, wager1)
     };
     let loser_final = blendizzard.get_epoch_player(&loser);
-    assert_eq!(winner_final.total_fp_contributed, winner_wager, "Winner contribution should match their wager");
+    assert_eq!(
+        winner_final.total_fp_contributed, winner_wager,
+        "Winner contribution should match their wager"
+    );
 
     // Loser should have no contribution
-    assert_eq!(loser_final.total_fp_contributed, 0, "Loser should have no contribution");
+    assert_eq!(
+        loser_final.total_fp_contributed, 0,
+        "Loser should have no contribution"
+    );
 
     // Both should have FP unlocked
     assert_eq!(winner_final.locked_fp, 0);
@@ -435,13 +442,8 @@ fn test_asymmetric_wagers() {
 #[should_panic(expected = "Error(Contract, #4)")] // AlreadyGuessed error
 fn test_player_cannot_guess_twice() {
     let env = setup_test_env();
-    let (
-        _admin,
-        _number_guess_addr,
-        number_guess_client,
-        mock_vault,
-        blendizzard,
-    ) = setup_number_guess_test(&env);
+    let (_admin, _number_guess_addr, number_guess_client, mock_vault, blendizzard) =
+        setup_number_guess_test(&env);
 
     let player1 = Address::generate(&env);
     let player2 = Address::generate(&env);
@@ -453,13 +455,8 @@ fn test_player_cannot_guess_twice() {
     blendizzard.select_faction(&player2, &1);
 
     let session_id = 13u32;
-    let game_id = number_guess_client.start_game(
-        &session_id,
-        &player1,
-        &player2,
-        &100_0000000,
-        &100_0000000,
-    );
+    let game_id =
+        number_guess_client.start_game(&session_id, &player1, &player2, &100_0000000, &100_0000000);
 
     // Player1 makes first guess
     number_guess_client.make_guess(&game_id, &player1, &5);
@@ -472,13 +469,8 @@ fn test_player_cannot_guess_twice() {
 #[should_panic(expected = "Error(Contract, #5)")] // BothPlayersNotGuessed error
 fn test_cannot_reveal_before_both_guess() {
     let env = setup_test_env();
-    let (
-        _admin,
-        _number_guess_addr,
-        number_guess_client,
-        mock_vault,
-        blendizzard,
-    ) = setup_number_guess_test(&env);
+    let (_admin, _number_guess_addr, number_guess_client, mock_vault, blendizzard) =
+        setup_number_guess_test(&env);
 
     let player1 = Address::generate(&env);
     let player2 = Address::generate(&env);
@@ -490,13 +482,8 @@ fn test_cannot_reveal_before_both_guess() {
     blendizzard.select_faction(&player2, &1);
 
     let session_id = 14u32;
-    let game_id = number_guess_client.start_game(
-        &session_id,
-        &player1,
-        &player2,
-        &100_0000000,
-        &100_0000000,
-    );
+    let game_id =
+        number_guess_client.start_game(&session_id, &player1, &player2, &100_0000000, &100_0000000);
 
     // Only player1 guesses
     number_guess_client.make_guess(&game_id, &player1, &5);
@@ -508,13 +495,8 @@ fn test_cannot_reveal_before_both_guess() {
 #[test]
 fn test_tie_game_player1_wins() {
     let env = setup_test_env();
-    let (
-        _admin,
-        _number_guess_addr,
-        number_guess_client,
-        mock_vault,
-        blendizzard,
-    ) = setup_number_guess_test(&env);
+    let (_admin, _number_guess_addr, number_guess_client, mock_vault, blendizzard) =
+        setup_number_guess_test(&env);
 
     let player1 = Address::generate(&env);
     let player2 = Address::generate(&env);
@@ -532,13 +514,8 @@ fn test_tie_game_player1_wins() {
     // So let's manufacture a scenario where both guess the same number
 
     let session_id = 15u32;
-    let game_id = number_guess_client.start_game(
-        &session_id,
-        &player1,
-        &player2,
-        &100_0000000,
-        &100_0000000,
-    );
+    let game_id =
+        number_guess_client.start_game(&session_id, &player1, &player2, &100_0000000, &100_0000000);
 
     // Both players guess the same number (guaranteed tie on distance)
     number_guess_client.make_guess(&game_id, &player1, &5);
@@ -557,13 +534,8 @@ fn test_tie_game_player1_wins() {
 #[test]
 fn test_abandoned_game_fp_stays_locked() {
     let env = setup_test_env();
-    let (
-        _admin,
-        _number_guess_addr,
-        number_guess_client,
-        mock_vault,
-        blendizzard,
-    ) = setup_number_guess_test(&env);
+    let (_admin, _number_guess_addr, number_guess_client, mock_vault, blendizzard) =
+        setup_number_guess_test(&env);
 
     let player1 = Address::generate(&env);
     let player2 = Address::generate(&env);
@@ -586,8 +558,14 @@ fn test_abandoned_game_fp_stays_locked() {
 
     assert_eq!(p1_epoch.locked_fp, wager, "Player1 FP should remain locked");
     assert_eq!(p2_epoch.locked_fp, wager, "Player2 FP should remain locked");
-    assert_eq!(p1_epoch.total_fp_contributed, 0, "No contribution from abandoned game");
-    assert_eq!(p2_epoch.total_fp_contributed, 0, "No contribution from abandoned game");
+    assert_eq!(
+        p1_epoch.total_fp_contributed, 0,
+        "No contribution from abandoned game"
+    );
+    assert_eq!(
+        p2_epoch.total_fp_contributed, 0,
+        "No contribution from abandoned game"
+    );
 
     // Note: In production, there should be a timeout mechanism or admin function
     // to handle abandoned games. For now, this demonstrates FP is correctly locked.
@@ -620,9 +598,15 @@ fn test_full_epoch_cycle_with_rewards() {
 
     // Ensure token ordering (Soroswap requires token_0 < token_1)
     let (blnd_token, usdc_token) = if blnd_token_client.address < usdc_token_client.address {
-        (blnd_token_client.address.clone(), usdc_token_client.address.clone())
+        (
+            blnd_token_client.address.clone(),
+            usdc_token_client.address.clone(),
+        )
     } else {
-        (usdc_token_client.address.clone(), blnd_token_client.address.clone())
+        (
+            usdc_token_client.address.clone(),
+            blnd_token_client.address.clone(),
+        )
     };
 
     // Create Soroswap infrastructure
@@ -726,7 +710,10 @@ fn test_full_epoch_cycle_with_rewards() {
     let specialrock_fp = epoch0.faction_standings.get(2).unwrap_or(0);
 
     let total_fp_contributed = wholenoodle_fp + pointystick_fp + specialrock_fp;
-    assert!(total_fp_contributed >= wager, "Factions should have accumulated FP");
+    assert!(
+        total_fp_contributed >= wager,
+        "Factions should have accumulated FP"
+    );
 
     // ========================================================================
     // Step 5: Advance time past epoch duration and cycle epoch
@@ -762,7 +749,9 @@ fn test_full_epoch_cycle_with_rewards() {
     assert!(epoch0_final.is_finalized, "Epoch 0 should be finalized");
     assert_eq!(epoch1.epoch_number, 1, "Should be in epoch 1");
 
-    let winning_faction = epoch0_final.winning_faction.expect("Should have a winning faction");
+    let winning_faction = epoch0_final
+        .winning_faction
+        .expect("Should have a winning faction");
     let reward_pool = epoch0_final.reward_pool;
 
     // Verify winning faction is the one with most FP
@@ -773,7 +762,10 @@ fn test_full_epoch_cycle_with_rewards() {
     } else {
         2
     };
-    assert_eq!(winning_faction, expected_winner, "Winning faction should be the one with most FP");
+    assert_eq!(
+        winning_faction, expected_winner,
+        "Winning faction should be the one with most FP"
+    );
 
     // ========================================================================
     // Step 7: Winners claim rewards
@@ -818,7 +810,10 @@ fn test_full_epoch_cycle_with_rewards() {
 
                 // Verify can't claim twice
                 let double_claim_result = blendizzard.try_claim_epoch_reward(&player, &0);
-                assert!(double_claim_result.is_err(), "Should not be able to claim twice");
+                assert!(
+                    double_claim_result.is_err(),
+                    "Should not be able to claim twice"
+                );
             } else if player_faction != winning_faction && player_epoch.total_fp_contributed > 0 {
                 // Losers from other factions with contribution shouldn't get rewards
                 // They either can't claim (error) or get 0
@@ -843,10 +838,12 @@ fn test_full_epoch_cycle_with_rewards() {
             for (player, _) in players_and_winners.iter() {
                 let player_epoch = blendizzard.get_epoch_player(&player);
                 if player_epoch.epoch_faction.unwrap() == winning_faction
-                    && player_epoch.total_fp_contributed > 0 {
+                    && player_epoch.total_fp_contributed > 0
+                {
                     if blendizzard.has_claimed_rewards(&player, &0) {
                         // Estimate what they got (we don't store it but can calculate)
-                        let player_share = (player_epoch.total_fp_contributed as i128 * reward_pool)
+                        let player_share = (player_epoch.total_fp_contributed as i128
+                            * reward_pool)
                             / winning_faction_fp as i128;
                         sum += player_share;
                     }
@@ -880,5 +877,8 @@ fn test_full_epoch_cycle_with_rewards() {
         .filter_map(|faction_id| epoch1_after_game.faction_standings.get(faction_id))
         .sum();
 
-    assert!(epoch1_total_fp >= wager, "Epoch 1 should have FP from new games");
+    assert!(
+        epoch1_total_fp >= wager,
+        "Epoch 1 should have FP from new games"
+    );
 }

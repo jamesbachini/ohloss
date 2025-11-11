@@ -9,7 +9,6 @@
 ///
 /// These tests use MockVault (simple, no complex Blend setup) to verify
 /// the game flow without external dependencies.
-
 use super::fee_vault_utils::{create_mock_vault, MockVaultClient};
 use super::testutils::{create_blendizzard_contract, setup_test_env};
 use crate::BlendizzardClient;
@@ -21,7 +20,15 @@ use soroban_sdk::{vec, Address, Env};
 // ============================================================================
 
 /// Create a complete test environment with MockVault and Blendizzard
-fn setup_game_test_env<'a>(env: &'a Env) -> (Address, Address, Address, MockVaultClient<'a>, BlendizzardClient<'a>) {
+fn setup_game_test_env<'a>(
+    env: &'a Env,
+) -> (
+    Address,
+    Address,
+    Address,
+    MockVaultClient<'a>,
+    BlendizzardClient<'a>,
+) {
     let admin = Address::generate(env);
     let game_contract = Address::generate(env);
 
@@ -51,7 +58,13 @@ fn setup_game_test_env<'a>(env: &'a Env) -> (Address, Address, Address, MockVaul
     // Add game to whitelist
     blendizzard.add_game(&game_contract);
 
-    (admin, game_contract, mock_vault_addr, mock_vault, blendizzard)
+    (
+        admin,
+        game_contract,
+        mock_vault_addr,
+        mock_vault,
+        blendizzard,
+    )
 }
 
 // ============================================================================
@@ -68,7 +81,7 @@ fn test_start_game_initializes_fp_from_vault() {
 
     // Set vault balances for both players
     let p1_balance = 1000_0000000; // 1000 USDC
-    let p2_balance = 500_0000000;  // 500 USDC
+    let p2_balance = 500_0000000; // 500 USDC
     mock_vault.set_user_balance(&player1, &p1_balance);
     mock_vault.set_user_balance(&player2, &p2_balance);
 
@@ -94,12 +107,24 @@ fn test_start_game_initializes_fp_from_vault() {
     // FP should be calculated from vault balance with multipliers
     // Base amounts: p1=1000, p2=500
     // With default multipliers (no time bonus), FP ≈ base amount
-    assert!(p1_epoch.available_fp + p1_epoch.locked_fp > 0, "Player 1 should have FP");
-    assert!(p2_epoch.available_fp + p2_epoch.locked_fp > 0, "Player 2 should have FP");
+    assert!(
+        p1_epoch.available_fp + p1_epoch.locked_fp > 0,
+        "Player 1 should have FP"
+    );
+    assert!(
+        p2_epoch.available_fp + p2_epoch.locked_fp > 0,
+        "Player 2 should have FP"
+    );
 
     // Locked FP should match wagers
-    assert_eq!(p1_epoch.locked_fp, 100_0000000, "Player 1 wager should be locked");
-    assert_eq!(p2_epoch.locked_fp, 50_0000000, "Player 2 wager should be locked");
+    assert_eq!(
+        p1_epoch.locked_fp, 100_0000000,
+        "Player 1 wager should be locked"
+    );
+    assert_eq!(
+        p2_epoch.locked_fp, 50_0000000,
+        "Player 2 wager should be locked"
+    );
 }
 
 #[test]
@@ -121,7 +146,14 @@ fn test_end_game_spends_fp_and_updates_faction_standings() {
     // Start game
     let session_id = 2u32;
     let wager = 100_0000000;
-    blendizzard.start_game(&game_contract, &session_id, &player1, &player2, &wager, &wager);
+    blendizzard.start_game(
+        &game_contract,
+        &session_id,
+        &player1,
+        &player2,
+        &wager,
+        &wager,
+    );
 
     // Get initial FP
     let p1_initial = blendizzard.get_epoch_player(&player1);
@@ -143,28 +175,24 @@ fn test_end_game_spends_fp_and_updates_faction_standings() {
 
     // Both players should have their wagers removed from locked_fp
     assert_eq!(
-        p1_final.locked_fp,
-        0,
+        p1_final.locked_fp, 0,
         "Winner's wager should be spent (removed from locked_fp)"
     );
 
     assert_eq!(
-        p2_final.locked_fp,
-        0,
+        p2_final.locked_fp, 0,
         "Loser's wager should be spent (removed from locked_fp)"
     );
 
     // Winner's available_fp should stay the same (they don't get FP back)
     assert_eq!(
-        p1_final.available_fp,
-        p1_initial.available_fp,
+        p1_final.available_fp, p1_initial.available_fp,
         "Winner's available FP should be unchanged (wager is spent, not returned)"
     );
 
     // Winner's total_fp_contributed should increase by their wager (for faction standings)
     assert_eq!(
-        p1_final.total_fp_contributed,
-        wager,
+        p1_final.total_fp_contributed, wager,
         "Winner's wager should contribute to faction standings"
     );
 }
@@ -181,7 +209,10 @@ fn test_faction_locks_on_first_game() {
     blendizzard.select_faction(&player, &0);
 
     // Faction should not be locked yet
-    assert!(!blendizzard.is_faction_locked(&player), "Faction should not be locked before first game");
+    assert!(
+        !blendizzard.is_faction_locked(&player),
+        "Faction should not be locked before first game"
+    );
 
     // Start a game
     let player2 = Address::generate(&env);
@@ -189,14 +220,28 @@ fn test_faction_locks_on_first_game() {
     blendizzard.select_faction(&player2, &1);
 
     let session_id = 3u32;
-    blendizzard.start_game(&game_contract, &session_id, &player, &player2, &50_0000000, &50_0000000);
+    blendizzard.start_game(
+        &game_contract,
+        &session_id,
+        &player,
+        &player2,
+        &50_0000000,
+        &50_0000000,
+    );
 
     // Faction should now be locked
-    assert!(blendizzard.is_faction_locked(&player), "Faction should be locked after first game");
+    assert!(
+        blendizzard.is_faction_locked(&player),
+        "Faction should be locked after first game"
+    );
 
     // Get epoch data to verify locked faction
     let epoch_player = blendizzard.get_epoch_player(&player);
-    assert_eq!(epoch_player.epoch_faction, Some(0), "Faction should be locked to WholeNoodle");
+    assert_eq!(
+        epoch_player.epoch_faction,
+        Some(0),
+        "Faction should be locked to WholeNoodle"
+    );
 
     // Try to change faction (should update User.selected_faction but not affect current epoch)
     blendizzard.select_faction(&player, &1); // Try to switch to PointyStick
@@ -233,7 +278,14 @@ fn test_session_stores_epoch_id() {
     // Start game in epoch 0
     let session_id = 999u32;
     let wager = 100_0000000;
-    blendizzard.start_game(&game_contract, &session_id, &player1, &player2, &wager, &wager);
+    blendizzard.start_game(
+        &game_contract,
+        &session_id,
+        &player1,
+        &player2,
+        &wager,
+        &wager,
+    );
 
     // Verify session exists and can be completed in same epoch
     let proof = soroban_sdk::Bytes::new(&env);
@@ -250,10 +302,12 @@ fn test_session_stores_epoch_id() {
 
     // Verify game completed
     let p1_epoch = blendizzard.get_epoch_player(&player1);
-    assert_eq!(p1_epoch.locked_fp, 0, "Game should have completed and unlocked FP");
     assert_eq!(
-        p1_epoch.total_fp_contributed,
-        wager,
+        p1_epoch.locked_fp, 0,
+        "Game should have completed and unlocked FP"
+    );
+    assert_eq!(
+        p1_epoch.total_fp_contributed, wager,
         "Winner's contribution should be recorded"
     );
 }
@@ -282,7 +336,14 @@ fn test_fp_calculation_with_amount_multiplier() {
 
     // Start game to initialize FP
     let session_id = 8u32;
-    blendizzard.start_game(&game_contract, &session_id, &player1, &player2, &10_0000000, &10_0000000);
+    blendizzard.start_game(
+        &game_contract,
+        &session_id,
+        &player1,
+        &player2,
+        &10_0000000,
+        &10_0000000,
+    );
 
     let p1_epoch = blendizzard.get_epoch_player(&player1);
     let p2_epoch = blendizzard.get_epoch_player(&player2);
@@ -292,7 +353,10 @@ fn test_fp_calculation_with_amount_multiplier() {
     let p2_total_fp = p2_epoch.available_fp + p2_epoch.locked_fp;
 
     // Player2 should have more FP than Player1 (due to higher balance)
-    assert!(p2_total_fp > p1_total_fp, "Player with higher balance should have more FP");
+    assert!(
+        p2_total_fp > p1_total_fp,
+        "Player with higher balance should have more FP"
+    );
 
     // The amount multiplier gives larger bonuses to higher balances
     // Amount multiplier formula: 1.0 + (amount / (amount + 1000))
@@ -333,7 +397,14 @@ fn test_fp_calculation_with_time_multiplier() {
 
     // Player1 starts a game immediately - time_multiplier_start set at T=0
     let session_id1 = 9u32;
-    blendizzard.start_game(&game_contract, &session_id1, &player1, &opponent, &50_0000000, &50_0000000);
+    blendizzard.start_game(
+        &game_contract,
+        &session_id1,
+        &player1,
+        &opponent,
+        &50_0000000,
+        &50_0000000,
+    );
 
     // Get player1's FP (calculated with time_multiplier at T=0, so ~1.0x)
     let p1_epoch = blendizzard.get_epoch_player(&player1);
@@ -360,7 +431,14 @@ fn test_fp_calculation_with_time_multiplier() {
 
     // FP is locked once initialized - starting another game shouldn't change it
     let session_id2 = 10u32;
-    blendizzard.start_game(&game_contract, &session_id2, &player1, &opponent, &50_0000000, &50_0000000);
+    blendizzard.start_game(
+        &game_contract,
+        &session_id2,
+        &player1,
+        &opponent,
+        &50_0000000,
+        &50_0000000,
+    );
 
     let p1_epoch_again = blendizzard.get_epoch_player(&player1);
     let p1_total_fp_before = p1_epoch.available_fp + p1_epoch.locked_fp;
@@ -369,8 +447,7 @@ fn test_fp_calculation_with_time_multiplier() {
     // Total FP should be unchanged (locked once per epoch)
     // Note: available/locked split changes, but total stays same
     assert_eq!(
-        p1_total_fp_before,
-        p1_total_fp_after,
+        p1_total_fp_before, p1_total_fp_after,
         "Total FP should remain constant within an epoch"
     );
 }
@@ -386,7 +463,7 @@ fn test_start_game_without_faction_selection() {
 
     // Set vault balances for both players
     let p1_balance = 1000_0000000; // 1000 USDC
-    let p2_balance = 500_0000000;  // 500 USDC
+    let p2_balance = 500_0000000; // 500 USDC
     mock_vault.set_user_balance(&player1, &p1_balance);
     mock_vault.set_user_balance(&player2, &p2_balance);
 

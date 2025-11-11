@@ -51,7 +51,13 @@ impl MockBlendizzard {
 // Test Helpers
 // ============================================================================
 
-fn setup_test() -> (Env, NumberGuessContractClient<'static>, MockBlendizzardClient<'static>, Address, Address) {
+fn setup_test() -> (
+    Env,
+    NumberGuessContractClient<'static>,
+    MockBlendizzardClient<'static>,
+    Address,
+    Address,
+) {
     let env = Env::default();
     env.mock_all_auths();
 
@@ -262,7 +268,13 @@ fn test_cannot_guess_below_range() {
     let (env, client, _blendizzard, player1, _player2) = setup_test();
 
     let session_id = 10u32;
-    let game_id = client.start_game(&session_id, &player1, &Address::generate(&env), &100_0000000, &100_0000000);
+    let game_id = client.start_game(
+        &session_id,
+        &player1,
+        &Address::generate(&env),
+        &100_0000000,
+        &100_0000000,
+    );
 
     // Try to guess 0 (below range) - should panic
     client.make_guess(&game_id, &player1, &0);
@@ -274,7 +286,13 @@ fn test_cannot_guess_above_range() {
     let (env, client, _blendizzard, player1, _player2) = setup_test();
 
     let session_id = 11u32;
-    let game_id = client.start_game(&session_id, &player1, &Address::generate(&env), &100_0000000, &100_0000000);
+    let game_id = client.start_game(
+        &session_id,
+        &player1,
+        &Address::generate(&env),
+        &100_0000000,
+        &100_0000000,
+    );
 
     // Try to guess 11 (above range) - should panic
     client.make_guess(&game_id, &player1, &11);

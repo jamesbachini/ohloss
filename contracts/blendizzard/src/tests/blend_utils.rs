@@ -4,7 +4,6 @@
 ///
 /// This module provides helpers for testing with real Blend pools using BlendFixture.
 /// Based on patterns from kalepail/fee-vault-v2.
-
 use blend_contract_sdk::pool::{Client as PoolClient, ReserveConfig, ReserveEmissionMetadata};
 use blend_contract_sdk::testutils::BlendFixture;
 use sep_40_oracle::testutils::{Asset, MockPriceOracleClient, MockPriceOracleWASM};

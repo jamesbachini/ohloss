@@ -80,7 +80,11 @@ pub(crate) fn select_faction(env: &Env, user: &Address, faction: u32) -> Result<
 /// # Errors
 /// * `FactionNotSelected` - If user hasn't explicitly selected a faction
 /// * `FactionAlreadyLocked` - If faction is already locked for this epoch
-pub(crate) fn lock_epoch_faction(env: &Env, user: &Address, current_epoch: u32) -> Result<u32, Error> {
+pub(crate) fn lock_epoch_faction(
+    env: &Env,
+    user: &Address,
+    current_epoch: u32,
+) -> Result<u32, Error> {
     // Get user's selected faction - user MUST have explicitly selected one
     let user_data = storage::get_user(env, user).ok_or(Error::FactionNotSelected)?;
     let selected_faction = user_data.selected_faction;
@@ -110,7 +114,6 @@ pub(crate) fn lock_epoch_faction(env: &Env, user: &Address, current_epoch: u32) 
 
     Ok(selected_faction)
 }
-
 
 /// Check if user's faction is locked for the current epoch
 pub(crate) fn is_faction_locked(env: &Env, user: &Address, epoch: u32) -> bool {

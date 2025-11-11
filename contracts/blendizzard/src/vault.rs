@@ -25,7 +25,6 @@ pub(crate) fn get_vault_balance(env: &Env, user: &Address) -> i128 {
     vault_client.get_underlying_tokens(user)
 }
 
-
 // ============================================================================
 // Cross-Epoch Balance Comparison
 // ============================================================================

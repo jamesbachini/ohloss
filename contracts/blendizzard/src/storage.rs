@@ -131,9 +131,7 @@ pub(crate) fn get_epoch_user(env: &Env, epoch: u32, user: &Address) -> Option<Ep
 /// Set epoch-specific user data
 pub(crate) fn set_epoch_user(env: &Env, epoch: u32, user: &Address, data: &EpochUser) {
     let key = DataKey::EpochUser(epoch, user.clone());
-    env.storage()
-        .temporary()
-        .set(&key, data);
+    env.storage().temporary().set(&key, data);
     extend_epoch_user_ttl(env, epoch, user);
 }
 
@@ -174,17 +172,13 @@ pub(crate) fn get_session(env: &Env, session_id: u32) -> Option<GameSession> {
 /// Set game session
 pub(crate) fn set_session(env: &Env, session_id: u32, data: &GameSession) {
     let key = DataKey::Session(session_id);
-    env.storage()
-        .temporary()
-        .set(&key, data);
+    env.storage().temporary().set(&key, data);
     extend_session_ttl(env, session_id);
 }
 
 /// Check if session exists
 pub(crate) fn has_session(env: &Env, session_id: u32) -> bool {
-    env.storage()
-        .temporary()
-        .has(&DataKey::Session(session_id))
+    env.storage().temporary().has(&DataKey::Session(session_id))
 }
 
 /// Check if a game contract is whitelisted
@@ -224,9 +218,7 @@ pub(crate) fn has_claimed(env: &Env, user: &Address, epoch: u32) -> bool {
 /// Mark rewards as claimed for user and epoch
 pub(crate) fn set_claimed(env: &Env, user: &Address, epoch: u32) {
     let key = DataKey::Claimed(user.clone(), epoch);
-    env.storage()
-        .temporary()
-        .set(&key, &true);
+    env.storage().temporary().set(&key, &true);
     extend_claimed_ttl(env, user, epoch);
 }
 

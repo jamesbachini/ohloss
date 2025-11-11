@@ -10,7 +10,7 @@
 //! Blendizzard contract. Games cannot be started or completed without FP involvement.
 
 use soroban_sdk::{
-    contract, contracterror, contractclient, contractevent, contractimpl, contracttype, Address,
+    contract, contractclient, contracterror, contractevent, contractimpl, contracttype, Address,
     Bytes, BytesN, Env,
 };
 
@@ -28,13 +28,7 @@ pub trait Blendizzard {
         player2_wager: i128,
     );
 
-    fn end_game(
-        env: Env,
-        game_id: Address,
-        session_id: u32,
-        proof: Bytes,
-        outcome: GameOutcome,
-    );
+    fn end_game(env: Env, game_id: Address, session_id: u32, proof: Bytes, outcome: GameOutcome);
 }
 
 // GameOutcome must match Blendizzard's definition
@@ -158,9 +152,7 @@ impl NumberGuessContract {
         }
 
         // Store admin and Blendizzard address
-        env.storage()
-            .instance()
-            .set(&DataKey::Admin, &admin);
+        env.storage().instance().set(&DataKey::Admin, &admin);
         env.storage()
             .instance()
             .set(&DataKey::BlendizzardAddress, &blendizzard);
@@ -236,9 +228,7 @@ impl NumberGuessContract {
 
         // Store game in temporary storage with 30-day TTL
         let game_key = DataKey::Game(game_id);
-        env.storage()
-            .temporary()
-            .set(&game_key, &game);
+        env.storage().temporary().set(&game_key, &game);
 
         // Set TTL to ensure game is retained for at least 30 days
         env.storage()
@@ -307,7 +297,8 @@ impl NumberGuessContract {
             game_id,
             player,
             guess,
-        }.publish(&env);
+        }
+        .publish(&env);
 
         Ok(())
     }

@@ -194,7 +194,11 @@ fn calculate_fp_from_multipliers(
 ///
 /// # Returns
 /// Total faction points calculated
-pub(crate) fn initialize_epoch_fp(env: &Env, user: &Address, current_epoch: u32) -> Result<i128, Error> {
+pub(crate) fn initialize_epoch_fp(
+    env: &Env,
+    user: &Address,
+    current_epoch: u32,
+) -> Result<i128, Error> {
     // Calculate total FP (queries vault internally)
     let total_fp = calculate_faction_points(env, user)?;
 
@@ -234,7 +238,12 @@ pub(crate) fn initialize_epoch_fp(env: &Env, user: &Address, current_epoch: u32)
 ///
 /// # Errors
 /// * `InsufficientFactionPoints` - If user doesn't have enough available FP
-pub(crate) fn lock_fp(env: &Env, user: &Address, amount: i128, current_epoch: u32) -> Result<(), Error> {
+pub(crate) fn lock_fp(
+    env: &Env,
+    user: &Address,
+    amount: i128,
+    current_epoch: u32,
+) -> Result<(), Error> {
     let mut epoch_user = storage::get_epoch_user(env, current_epoch, user)
         .ok_or(Error::InsufficientFactionPoints)?;
 
@@ -259,5 +268,3 @@ pub(crate) fn lock_fp(env: &Env, user: &Address, amount: i128, current_epoch: u3
 
     Ok(())
 }
-
-

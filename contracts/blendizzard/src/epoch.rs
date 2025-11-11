@@ -214,7 +214,8 @@ fn withdraw_and_convert_rewards(env: &Env) -> Result<i128, Error> {
     // CRITICAL: This claims BLND token emissions that accrue to the vault from the Blend pool
     // Emissions are separate from admin fees and MUST be claimed explicitly
     // Without this, we're leaving significant BLND rewards unclaimed!
-    let emissions_claimed = vault_client.claim_emissions(&config.reserve_token_ids, &current_contract);
+    let emissions_claimed =
+        vault_client.claim_emissions(&config.reserve_token_ids, &current_contract);
     total_blnd += emissions_claimed;
 
     // Early return if no BLND available from either source
@@ -296,7 +297,6 @@ pub(crate) fn initialize_first_epoch(env: &Env, epoch_duration: u64) {
 // ============================================================================
 // Query Functions
 // ============================================================================
-
 
 /// Get faction standings for a specific epoch
 pub(crate) fn get_faction_standings(env: &Env, epoch: u32) -> Result<Map<u32, i128>, Error> {
