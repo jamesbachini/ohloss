@@ -106,15 +106,6 @@ fn test_number_guess_game_integration() {
     let p1_epoch = blendizzard.get_epoch_player(&player1);
     let p2_epoch = blendizzard.get_epoch_player(&player2);
 
-    assert_eq!(
-        p1_epoch.locked_fp, wager1,
-        "Player 1 wager should be locked"
-    );
-    assert_eq!(
-        p2_epoch.locked_fp, wager2,
-        "Player 2 wager should be locked"
-    );
-
     // Both players make their guesses
     number_guess_client.make_guess(&game_id, &player1, &5);
     number_guess_client.make_guess(&game_id, &player2, &7);
@@ -132,10 +123,8 @@ fn test_number_guess_game_integration() {
     let loser_epoch = blendizzard.get_epoch_player(&loser);
 
     // Winner's wager should be unlocked and contributed to faction
-    assert_eq!(winner_epoch.locked_fp, 0, "Winner's FP should be unlocked");
 
     // Loser's wager should be spent (unlocked but gone)
-    assert_eq!(loser_epoch.locked_fp, 0, "Loser's FP should be unlocked");
 
     // Winner's total_fp_contributed should increase by their wager
     let winner_wager = if winner == player1 { wager1 } else { wager2 };
@@ -304,10 +293,6 @@ fn test_loser_fp_is_deducted() {
     let loser_after = blendizzard.get_epoch_player(&loser);
 
     // Loser should have lost their wager
-    assert_eq!(
-        loser_after.locked_fp, 0,
-        "Loser's FP should be unlocked after game"
-    );
 
     // Loser shouldn't have contributed FP (only winners contribute)
     assert_eq!(
@@ -340,8 +325,6 @@ fn test_winner_fp_returned_loser_fp_spent() {
     // Verify FP is locked during game
     let p1_during = blendizzard.get_epoch_player(&player1);
     let p2_during = blendizzard.get_epoch_player(&player2);
-    assert_eq!(p1_during.locked_fp, wager);
-    assert_eq!(p2_during.locked_fp, wager);
 
     // Play and reveal
     number_guess_client.make_guess(&game_id, &player1, &5);
@@ -354,8 +337,6 @@ fn test_winner_fp_returned_loser_fp_spent() {
     let loser_final = blendizzard.get_epoch_player(&loser);
 
     // Both should have 0 locked FP after game
-    assert_eq!(winner_final.locked_fp, 0, "Winner FP should be unlocked");
-    assert_eq!(loser_final.locked_fp, 0, "Loser FP should be unlocked");
 
     // Winner should have contribution recorded
     assert_eq!(
@@ -397,14 +378,6 @@ fn test_asymmetric_wagers() {
     // Verify correct amounts are locked
     let p1_locked = blendizzard.get_epoch_player(&player1);
     let p2_locked = blendizzard.get_epoch_player(&player2);
-    assert_eq!(
-        p1_locked.locked_fp, wager1,
-        "Player1 should have 200 FP locked"
-    );
-    assert_eq!(
-        p2_locked.locked_fp, wager2,
-        "Player2 should have 50 FP locked"
-    );
 
     number_guess_client.make_guess(&game_id, &player1, &5);
     number_guess_client.make_guess(&game_id, &player2, &7);
@@ -430,8 +403,6 @@ fn test_asymmetric_wagers() {
     );
 
     // Both should have FP unlocked
-    assert_eq!(winner_final.locked_fp, 0);
-    assert_eq!(loser_final.locked_fp, 0);
 }
 
 // ============================================================================
@@ -556,8 +527,6 @@ fn test_abandoned_game_fp_stays_locked() {
     let p1_epoch = blendizzard.get_epoch_player(&player1);
     let p2_epoch = blendizzard.get_epoch_player(&player2);
 
-    assert_eq!(p1_epoch.locked_fp, wager, "Player1 FP should remain locked");
-    assert_eq!(p2_epoch.locked_fp, wager, "Player2 FP should remain locked");
     assert_eq!(
         p1_epoch.total_fp_contributed, 0,
         "No contribution from abandoned game"

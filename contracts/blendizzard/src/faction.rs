@@ -96,7 +96,6 @@ pub(crate) fn lock_epoch_faction(
             epoch_faction: None,
             epoch_balance_snapshot: 0, // Will be set when FP is calculated
             available_fp: 0,
-            locked_fp: 0,
             total_fp_contributed: 0,
         });
 

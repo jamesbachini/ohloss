@@ -276,6 +276,29 @@ impl Blendizzard {
         storage::migrate_player_storage(&env, &player)
     }
 
+    /// Migration: Update EpochPlayer storage key from old format to new format
+    ///
+    /// This migration handles the storage key rename from DataKey::EpochUser to DataKey::EpochPlayer.
+    /// The EpochPlayer struct itself hasn't changed, only the storage key name changed
+    /// as part of the user→player terminology standardization.
+    ///
+    /// # Usage
+    /// Call this for each (epoch, player) pair that might have old data. Typically called:
+    /// - By players when they encounter issues claiming rewards or checking epoch data
+    /// - By admin for active epochs with known players
+    /// - Can be called proactively for the current epoch
+    ///
+    /// # Arguments
+    /// * `epoch` - Epoch number to migrate
+    /// * `player` - Player address to migrate
+    ///
+    /// # Returns
+    /// * `true` if migration was performed (found data in old DataKey::EpochUser)
+    /// * `false` if data doesn't exist or is already migrated to DataKey::EpochPlayer
+    pub fn migrate_epoch_player(env: Env, epoch: u32, player: Address) -> bool {
+        storage::migrate_epoch_player_storage(&env, epoch, &player)
+    }
+
     // ========================================================================
     // Game Registry
     // ========================================================================
@@ -383,7 +406,6 @@ impl Blendizzard {
             epoch_faction: None, // Faction not locked until first game
             epoch_balance_snapshot: current_balance,
             available_fp: total_fp,
-            locked_fp: 0,
             total_fp_contributed: 0,
         })
     }

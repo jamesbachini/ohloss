@@ -546,7 +546,7 @@ fn test_get_epoch_player_returns_defaults_before_first_game() {
     assert_eq!(epoch_data.epoch_faction, None);
 
     // No locked FP or contributions yet
-    assert_eq!(epoch_data.locked_fp, 0);
+
     assert_eq!(epoch_data.total_fp_contributed, 0);
 }
 

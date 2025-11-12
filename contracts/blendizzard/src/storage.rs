@@ -1,6 +1,8 @@
 use soroban_sdk::{contracttype, Address, Env};
 
-use crate::types::{Config, EpochInfo, EpochPlayer, GameSession, Player, PlayerV0, PlayerV1};
+use crate::types::{
+    Config, EpochInfo, EpochPlayer, EpochPlayerV0, GameSession, Player, PlayerV0, PlayerV1,
+};
 
 // ============================================================================
 // Storage Keys
@@ -196,6 +198,67 @@ pub(crate) fn migrate_player_storage(env: &Env, player: &Address) -> bool {
     false
 }
 
+/// Migrate epoch-specific player data from old storage key to new one
+///
+/// Handles migration from:
+/// - Old storage key (DataKey::EpochUser) to new key (DataKey::EpochPlayer)
+/// - V0 (pre-Nov 13): EpochPlayer with locked_fp field
+/// - V1 (current): EpochPlayer without locked_fp field
+///
+/// Returns true if migration was performed, false if already migrated or doesn't exist.
+pub(crate) fn migrate_epoch_player_storage(env: &Env, epoch: u32, player: &Address) -> bool {
+    let new_key = DataKey::EpochPlayer(epoch, player.clone());
+    let old_key = DataKey::EpochUser(epoch, player.clone());
+
+    // Check if already migrated to new format (exists in new key with new format)
+    let new_format_check: Option<EpochPlayer> = env.storage().temporary().get(&new_key);
+    if new_format_check.is_some() {
+        return false;
+    }
+
+    // Try to read from old key as V0 format (with locked_fp)
+    let v0_data: Option<EpochPlayerV0> = env.storage().temporary().get(&old_key);
+    if let Some(old) = v0_data {
+        // Convert V0 to V1 (drop locked_fp field)
+        let new_data = EpochPlayer {
+            epoch_faction: old.epoch_faction,
+            epoch_balance_snapshot: old.epoch_balance_snapshot,
+            available_fp: old.available_fp,
+            total_fp_contributed: old.total_fp_contributed,
+        };
+
+        // Write to new key
+        env.storage().temporary().set(&new_key, &new_data);
+        extend_epoch_player_ttl(env, epoch, player);
+
+        // Delete old key
+        env.storage().temporary().remove(&old_key);
+
+        return true;
+    }
+
+    // Try to read from new key as V0 format (with locked_fp) - in case it was partially migrated
+    let v0_new_key_data: Option<EpochPlayerV0> = env.storage().temporary().get(&new_key);
+    if let Some(old) = v0_new_key_data {
+        // Convert V0 to V1 (drop locked_fp field)
+        let new_data = EpochPlayer {
+            epoch_faction: old.epoch_faction,
+            epoch_balance_snapshot: old.epoch_balance_snapshot,
+            available_fp: old.available_fp,
+            total_fp_contributed: old.total_fp_contributed,
+        };
+
+        // Overwrite with new format
+        env.storage().temporary().set(&new_key, &new_data);
+        extend_epoch_player_ttl(env, epoch, player);
+
+        return true;
+    }
+
+    // Data doesn't exist in either key or format
+    false
+}
+
 /// Check if player exists
 #[allow(dead_code)]
 pub(crate) fn has_player(env: &Env, player: &Address) -> bool {
@@ -206,12 +269,30 @@ pub(crate) fn has_player(env: &Env, player: &Address) -> bool {
 
 /// Get epoch-specific player data
 pub(crate) fn get_epoch_player(env: &Env, epoch: u32, player: &Address) -> Option<EpochPlayer> {
-    let key = DataKey::EpochPlayer(epoch, player.clone());
-    let result = env.storage().temporary().get(&key);
+    let new_key = DataKey::EpochPlayer(epoch, player.clone());
+
+    // Try new key with new format (V1 - without locked_fp)
+    let result: Option<EpochPlayer> = env.storage().temporary().get(&new_key);
     if result.is_some() {
         extend_epoch_player_ttl(env, epoch, player);
+        return result;
     }
-    result
+
+    // Try old key (DataKey::EpochUser) with V0 format (with locked_fp)
+    let old_key = DataKey::EpochUser(epoch, player.clone());
+    let v0_result: Option<EpochPlayerV0> = env.storage().temporary().get(&old_key);
+    if let Some(v0_data) = v0_result {
+        extend_epoch_player_ttl(env, epoch, player);
+        // Convert on the fly (drop locked_fp)
+        return Some(EpochPlayer {
+            epoch_faction: v0_data.epoch_faction,
+            epoch_balance_snapshot: v0_data.epoch_balance_snapshot,
+            available_fp: v0_data.available_fp,
+            total_fp_contributed: v0_data.total_fp_contributed,
+        });
+    }
+
+    None
 }
 
 /// Set epoch-specific player data

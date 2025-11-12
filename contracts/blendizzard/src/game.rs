@@ -242,7 +242,7 @@ pub(crate) fn end_game(
     verify_proof(env, proof, outcome)?;
 
     // Determine winner and loser
-    let (winner, loser, winner_wager, loser_wager) = if outcome.winner {
+    let (winner, loser, winner_wager, _loser_wager) = if outcome.winner {
         // Player1 won
         (
             &session.player1,
@@ -262,34 +262,20 @@ pub(crate) fn end_game(
 
     // Spend FP: Both players LOSE their wagered FP (it's consumed/burned)
     // Only the winner's wager contributes to their faction standings
+    // Note: FP was already subtracted from available_fp when game started (in lock_fp)
 
-    // Get both players' epoch data
+    // Get winner's epoch data
     let mut winner_epoch = storage::get_epoch_player(env, current_epoch, winner)
         .ok_or(Error::InsufficientFactionPoints)?;
-    let mut loser_epoch = storage::get_epoch_player(env, current_epoch, loser)
-        .ok_or(Error::InsufficientFactionPoints)?;
 
-    // Step 1: Remove winner's wager from locked_fp (spent/burned)
-    winner_epoch.locked_fp = winner_epoch
-        .locked_fp
-        .checked_sub(winner_wager)
-        .ok_or(Error::OverflowError)?;
-
-    // Step 2: Remove loser's wager from locked_fp (spent/burned)
-    loser_epoch.locked_fp = loser_epoch
-        .locked_fp
-        .checked_sub(loser_wager)
-        .ok_or(Error::OverflowError)?;
-
-    // Step 3: Only winner's wager contributes to faction standings
+    // Only winner's wager contributes to faction standings
     winner_epoch.total_fp_contributed = winner_epoch
         .total_fp_contributed
         .checked_add(winner_wager)
         .ok_or(Error::OverflowError)?;
 
-    // Save both players' updated data
+    // Save winner's updated data
     storage::set_epoch_player(env, current_epoch, winner, &winner_epoch);
-    storage::set_epoch_player(env, current_epoch, loser, &loser_epoch);
 
     // Update session
     session.status = GameStatus::Completed;

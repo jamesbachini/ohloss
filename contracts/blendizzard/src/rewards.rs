@@ -129,7 +129,11 @@ pub(crate) fn claim_epoch_reward(env: &Env, player: &Address, epoch: u32) -> Res
 /// # Errors
 /// * `OverflowError` - If calculation overflows
 /// * `DivisionByZero` - If total_fp is 0
-fn calculate_reward_share(player_fp: i128, total_fp: i128, reward_pool: i128) -> Result<i128, Error> {
+fn calculate_reward_share(
+    player_fp: i128,
+    total_fp: i128,
+    reward_pool: i128,
+) -> Result<i128, Error> {
     // Calculate player's share as a fraction: player_fp / total_fp
     let share = player_fp
         .fixed_div_floor(total_fp, SCALAR_7)

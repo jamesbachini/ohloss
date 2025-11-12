@@ -83,11 +83,20 @@ pub struct EpochPlayer {
     /// Calculated once at first game of epoch and remains valid until next epoch
     pub available_fp: i128,
 
-    /// Faction points currently locked in active games
-    pub locked_fp: i128,
-
     /// Total faction points contributed to the player's faction this epoch
     /// Used for reward distribution calculation
+    pub total_fp_contributed: i128,
+}
+
+/// OLD EpochPlayer struct for migration purposes (pre-Nov 13)
+/// Used to read data stored with old field "locked_fp"
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct EpochPlayerV0 {
+    pub epoch_faction: Option<u32>,
+    pub epoch_balance_snapshot: i128,
+    pub available_fp: i128,
+    pub locked_fp: i128,
     pub total_fp_contributed: i128,
 }
 

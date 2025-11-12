@@ -13,7 +13,7 @@
  * See CHITSHEET.md for contract addresses.
  */
 
-import { Client as BlendizzardContract, type Player, type EpochUser } from 'blendizzard';
+import { Client as BlendizzardContract, type Player, type EpochPlayer } from 'blendizzard';
 import { Client as FeeVaultContract } from 'fee-vault';
 import { Client as NumberGuessContract } from 'number-guess';
 import { Keypair, Networks, Transaction, BASE_FEE, contract, rpc } from '@stellar/stellar-sdk';
@@ -266,14 +266,17 @@ async function main() {
   console.log('-'.repeat(60));
 
   // First, query each player's available FP
-  const p1EpochBefore = await queryContract<EpochUser>(
+  const p1EpochBefore = await queryContract<EpochPlayer>(
     blendizzard1.get_epoch_player({ player: player1.publicKey() }, DEFAULT_METHOD_OPTIONS),
     'Get Player 1 epoch data'
   );
-  const p2EpochBefore = await queryContract<EpochUser>(
+  const p2EpochBefore = await queryContract<EpochPlayer>(
     blendizzard2.get_epoch_player({ player: player2.publicKey() }, DEFAULT_METHOD_OPTIONS),
     'Get Player 2 epoch data'
   );
+
+  console.log(p1EpochBefore);
+  console.log(p2EpochBefore);
 
   console.log(`\n📊 FP State Before Game:`);
   console.log(`   Player 1 Available FP: ${formatAmount(BigInt(p1EpochBefore.available_fp))}`);
@@ -301,11 +304,11 @@ async function main() {
   // );
 
   // // Check FP state after game start
-  // const p1EpochAfter = await queryContract<EpochUser>(
+  // const p1EpochAfter = await queryContract<EpochPlayer>(
   //   blendizzard1.get_epoch_player({ player: player1.publicKey() }, DEFAULT_METHOD_OPTIONS),
   //   'Get Player 1 epoch data after game start'
   // );
-  // const p2EpochAfter = await queryContract<EpochUser>(
+  // const p2EpochAfter = await queryContract<EpochPlayer>(
   //   blendizzard2.get_epoch_player({ player: player2.publicKey() }, DEFAULT_METHOD_OPTIONS),
   //   'Get Player 2 epoch data after game start'
   // );

@@ -161,7 +161,7 @@ impl NumberGuessContract {
     /// Start a new game between two players with FP wagers.
     /// This creates a session in Blendizzard and locks FP before starting the game.
     ///
-    /// **CRITICAL:** This method requires authorization from THIS contract (not users).
+    /// **CRITICAL:** This method requires authorization from THIS contract (not players).
     /// Blendizzard will call `game_id.require_auth()` which checks this contract's address.
     ///
     /// # Arguments

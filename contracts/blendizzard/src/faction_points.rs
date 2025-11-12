@@ -211,12 +211,11 @@ pub(crate) fn initialize_epoch_fp(
             epoch_faction: None,
             epoch_balance_snapshot: current_balance, // Snapshot current balance
             available_fp: 0,
-            locked_fp: 0,
             total_fp_contributed: 0,
         });
 
     // Set available FP (only if not already set)
-    if epoch_player.available_fp == 0 && epoch_player.locked_fp == 0 {
+    if epoch_player.available_fp == 0 && epoch_player.total_fp_contributed == 0 {
         epoch_player.available_fp = total_fp;
         epoch_player.epoch_balance_snapshot = current_balance; // Update snapshot
     }
@@ -253,15 +252,10 @@ pub(crate) fn lock_fp(
         return Err(Error::InsufficientFactionPoints);
     }
 
-    // Move FP from available to locked
+    // Subtract FP from available (wager is now tracked in GameSession)
     epoch_player.available_fp = epoch_player
         .available_fp
         .checked_sub(amount)
-        .ok_or(Error::OverflowError)?;
-
-    epoch_player.locked_fp = epoch_player
-        .locked_fp
-        .checked_add(amount)
         .ok_or(Error::OverflowError)?;
 
     // Save epoch player data

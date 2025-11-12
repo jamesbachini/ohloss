@@ -107,24 +107,10 @@ fn test_start_game_initializes_fp_from_vault() {
     // FP should be calculated from vault balance with multipliers
     // Base amounts: p1=1000, p2=500
     // With default multipliers (no time bonus), FP ≈ base amount
-    assert!(
-        p1_epoch.available_fp + p1_epoch.locked_fp > 0,
-        "Player 1 should have FP"
-    );
-    assert!(
-        p2_epoch.available_fp + p2_epoch.locked_fp > 0,
-        "Player 2 should have FP"
-    );
+    assert!(p1_epoch.available_fp > 0, "Player 1 should have FP");
+    assert!(p2_epoch.available_fp > 0, "Player 2 should have FP");
 
     // Locked FP should match wagers
-    assert_eq!(
-        p1_epoch.locked_fp, 100_0000000,
-        "Player 1 wager should be locked"
-    );
-    assert_eq!(
-        p2_epoch.locked_fp, 50_0000000,
-        "Player 2 wager should be locked"
-    );
 }
 
 #[test]
@@ -172,17 +158,6 @@ fn test_end_game_spends_fp_and_updates_faction_standings() {
     // Verify FP spending (both players lose their wagers)
     let p1_final = blendizzard.get_epoch_player(&player1);
     let p2_final = blendizzard.get_epoch_player(&player2);
-
-    // Both players should have their wagers removed from locked_fp
-    assert_eq!(
-        p1_final.locked_fp, 0,
-        "Winner's wager should be spent (removed from locked_fp)"
-    );
-
-    assert_eq!(
-        p2_final.locked_fp, 0,
-        "Loser's wager should be spent (removed from locked_fp)"
-    );
 
     // Winner's available_fp should stay the same (they don't get FP back)
     assert_eq!(
@@ -297,10 +272,7 @@ fn test_session_stores_epoch_id() {
 
     // Verify game completed
     let p1_epoch = blendizzard.get_epoch_player(&player1);
-    assert_eq!(
-        p1_epoch.locked_fp, 0,
-        "Game should have completed and unlocked FP"
-    );
+
     assert_eq!(
         p1_epoch.total_fp_contributed, wager,
         "Winner's contribution should be recorded"
@@ -343,9 +315,9 @@ fn test_fp_calculation_with_amount_multiplier() {
     let p1_epoch = blendizzard.get_epoch_player(&player1);
     let p2_epoch = blendizzard.get_epoch_player(&player2);
 
-    // Total FP = available + locked
-    let p1_total_fp = p1_epoch.available_fp + p1_epoch.locked_fp;
-    let p2_total_fp = p2_epoch.available_fp + p2_epoch.locked_fp;
+    // Total FP = available (locked_fp removed)
+    let p1_total_fp = p1_epoch.available_fp;
+    let p2_total_fp = p2_epoch.available_fp;
 
     // Player2 should have more FP than Player1 (due to higher balance)
     assert!(
@@ -403,7 +375,7 @@ fn test_fp_calculation_with_time_multiplier() {
 
     // Get player1's FP (calculated with time_multiplier at T=0, so ~1.0x)
     let p1_epoch = blendizzard.get_epoch_player(&player1);
-    let p1_fp = p1_epoch.available_fp + p1_epoch.locked_fp;
+    let p1_fp = p1_epoch.available_fp;
 
     // Jump 30 days forward
     env.ledger().with_mut(|li| li.timestamp += 86_400 * 30);
@@ -436,14 +408,12 @@ fn test_fp_calculation_with_time_multiplier() {
     );
 
     let p1_epoch_again = blendizzard.get_epoch_player(&player1);
-    let p1_total_fp_before = p1_epoch.available_fp + p1_epoch.locked_fp;
-    let p1_total_fp_after = p1_epoch_again.available_fp + p1_epoch_again.locked_fp;
 
-    // Total FP should be unchanged (locked once per epoch)
-    // Note: available/locked split changes, but total stays same
-    assert_eq!(
-        p1_total_fp_before, p1_total_fp_after,
-        "Total FP should remain constant within an epoch"
+    // FP calculation is locked once per epoch - starting another game just spends more FP
+    // available_fp decreases with each game (no locked_fp tracking anymore)
+    assert!(
+        p1_epoch_again.available_fp < p1_epoch.available_fp,
+        "Available FP should decrease when starting another game"
     );
 }
 
