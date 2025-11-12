@@ -23,28 +23,28 @@ All Blendizzard functions follow the "Checks-Effects-Interactions" pattern:
 **vault::withdraw (contracts/blendizzard/src/vault.rs:97-143)**
 ```rust
 // 1. Checks
-user.require_auth();
-if user_data.total_deposited < amount { return Err(...) }
+player.require_auth();
+if player_data.total_deposited < amount { return Err(...) }
 
 // 2. Effects
-user_data.total_deposited -= amount;
-storage::set_user(env, user, &user_data);
+player_data.total_deposited -= amount;
+storage::set_player(env, player, &player_data);
 
 // 3. Interactions
-vault_client.withdraw(user, &amount);
+vault_client.withdraw(player, &amount);
 ```
 
 **rewards::claim_yield (contracts/blendizzard/src/rewards.rs:36-111)**
 ```rust
 // 1. Checks
-user.require_auth();
-if storage::has_claimed(env, user, epoch) { return Err(...) }
+player.require_auth();
+if storage::has_claimed(env, player, epoch) { return Err(...) }
 
 // 2. Effects
-storage::set_claimed(env, user, epoch);
+storage::set_claimed(env, player, epoch);
 
 // 3. Interactions
-usdc_client.transfer(&contract, user, &amount);
+usdc_client.transfer(&contract, player, &amount);
 ```
 
 **epoch::withdraw_and_convert_rewards (contracts/blendizzard/src/epoch.rs:179-248)**
@@ -64,21 +64,21 @@ let usdc_received = post_usdc_balance - pre_usdc_balance;
 
 ### Additional Protections
 
-1. **Emergency Pause**: Admin can pause all user functions via `pause()` function
+1. **Emergency Pause**: Admin can pause all player functions via `pause()` function
 2. **Authorization Checks**: All sensitive functions use `require_auth()`
 3. **State Validation**: All arithmetic uses checked operations
-4. **Input Validation**: All user inputs are validated before use
+4. **Input Validation**: All player inputs are validated before use
 
 ## Attack Vectors Mitigated
 
 ### 1. Flash Deposit Attack
-**Threat**: User deposits large amount just before epoch end to gain faction points
+**Threat**: Player deposits large amount just before epoch end to gain faction points
 
 **Mitigation**: Time multiplier starts at 1.0x, takes 30 days to reach ~1.5x
 **Location**: `contracts/blendizzard/src/faction_points.rs:113-147`
 
 ### 2. Epoch Boundary Manipulation
-**Threat**: User times deposits/withdrawals around epoch boundaries
+**Threat**: Player times deposits/withdrawals around epoch boundaries
 
 **Mitigation**:
 - FP snapshot at first game start in epoch
@@ -87,7 +87,7 @@ let usdc_received = post_usdc_balance - pre_usdc_balance;
 **Location**: `contracts/blendizzard/src/vault.rs:146-199`
 
 ### 3. Faction Switching Exploits
-**Threat**: User switches faction mid-epoch to be on winning side
+**Threat**: Player switches faction mid-epoch to be on winning side
 
 **Mitigation**: Faction locks on first game start, cannot change
 **Location**: `contracts/blendizzard/src/faction.rs`
@@ -159,7 +159,7 @@ fn verify_proof(_env: &Env, _proof: &Bytes, _outcome: &GameOutcome) -> Result<()
 - [x] All arithmetic uses checked operations or fixed-point math
 - [x] All storage writes have corresponding validation
 - [x] No unbounded loops or recursion
-- [x] All user inputs are validated
+- [x] All player inputs are validated
 - [x] All admin functions have access control
 - [x] Time-dependent logic handles edge cases
 - [x] Storage keys cannot collide (type-safe enum keys)
@@ -176,7 +176,7 @@ fn verify_proof(_env: &Env, _proof: &Bytes, _outcome: &GameOutcome) -> Result<()
 
 ### ⏳ Pending
 - [ ] Comprehensive fuzzing
-- [ ] Load testing (many users/games)
+- [ ] Load testing (many players/games)
 - [ ] Failure mode analysis
 
 ## Best Practices Followed
@@ -207,7 +207,7 @@ fn verify_proof(_env: &Env, _proof: &Bytes, _outcome: &GameOutcome) -> Result<()
 - [ ] Gradual rollout with caps
 - [ ] Monitoring and alerting setup
 - [ ] Emergency response plan documented
-- [ ] User funds insurance/protection considered
+- [ ] Player funds insurance/protection considered
 
 ## Contact
 

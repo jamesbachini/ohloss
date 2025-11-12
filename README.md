@@ -22,7 +22,7 @@ Blendizzard creates a gamified DeFi experience where:
 - **Reward Claims**: Proportional USDC rewards based on FP contribution
 
 ### Security Features
-- **Emergency Pause**: Admin can halt all user functions in case of vulnerabilities
+- **Emergency Pause**: Admin can halt all player functions in case of vulnerabilities
 - **Game Authorization**: Only whitelisted game contracts can submit outcomes via `require_auth()`
 - **TTL Management**: Automatic storage extension (7-day threshold, 30-day extension)
 - **FP Reset Logic**: >50% withdrawals during epoch reset time multiplier to prevent gaming
@@ -191,13 +191,13 @@ multiplier = 1.0 + (time_held_seconds / (time_held_seconds + 30_days))
 
 ### Game Flow
 
-1. **Deposit**: User deposits USDC into fee-vault (earns BLND yield)
+1. **Deposit**: Player deposits USDC into fee-vault (earns BLND yield)
 2. **Select Faction**: Choose WholeNoodle, PointyStick, or SpecialRock
 3. **Start Game**: Wager FP against another player (faction locks on first game)
 4. **Play**: Off-chain gameplay with ZK-proof generation (client-side for MVP)
 5. **End Game**: Winner gains FP from loser, contributes to faction standings
 6. **Epoch End**: After 4 days, winning faction shares USDC rewards proportionally
-7. **Claim Rewards**: Users claim their share of the reward pool
+7. **Claim Rewards**: Players claim their share of the reward pool
 
 ### Epoch Cycling
 
@@ -207,7 +207,7 @@ Every 4 days (345,600 seconds):
 2. Withdraw accumulated BLND from fee-vault admin balance
 3. Convert BLND → USDC via Soroswap
 4. Set reward pool (USDC amount)
-5. Users from winning faction can claim proportional rewards
+5. Players from winning faction can claim proportional rewards
 
 ## Exported Functions (27)
 
@@ -247,7 +247,7 @@ Every 4 days (345,600 seconds):
 ### Rewards
 - `claim_yield` - Claim USDC rewards for finalized epoch
 - `get_claimable_amount` - Calculate pending rewards
-- `has_claimed_rewards` - Check if user claimed for epoch
+- `has_claimed_rewards` - Check if player claimed for epoch
 
 ### Player Queries
 - `get_player` - Get persistent player data

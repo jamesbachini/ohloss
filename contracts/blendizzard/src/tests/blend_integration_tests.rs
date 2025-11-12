@@ -256,7 +256,7 @@ fn test_epoch_cycle_with_real_blend_pool_emissions() {
     // Verify both methods claim non-zero emissions
     assert!(
         pool_user_emissions > 0,
-        "Direct pool user should claim non-zero emissions"
+        "Direct pool player should claim non-zero emissions"
     );
     assert!(
         claimed_blnd > 0,
@@ -681,7 +681,7 @@ fn test_full_epoch_cycle_with_all_real_contracts() {
     blendizzard.select_faction(&player1, &0); // WholeNoodle
     blendizzard.select_faction(&player2, &1); // PointyStick
 
-    // Mock user vault balances for FP calculation
+    // Mock player vault balances for FP calculation
     // (In production, users would have deposited to fee-vault)
     // Since we're using real fee-vault, we can't easily mock balances
     // So we'll skip game play and just test epoch cycling with admin emissions

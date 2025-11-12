@@ -293,4 +293,3 @@ pub(crate) fn initialize_first_epoch(env: &Env, epoch_duration: u64) {
     storage::set_epoch(env, 0, &epoch);
     storage::set_current_epoch(env, 0);
 }
-

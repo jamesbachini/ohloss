@@ -13,7 +13,7 @@
 ## Problem Identified
 
 The `GameSession` struct was storing player factions despite them being:
-1. **Already stored** in `EpochUser.epoch_faction` (single source of truth)
+1. **Already stored** in `EpochPlayer.epoch_faction` (single source of truth)
 2. **Never read** by any contract logic
 3. **Not included** in events or any output
 4. **Duplicated data** that wastes storage
@@ -46,9 +46,9 @@ GameSession {
 ```rust
 // game.rs:310-322 - update_faction_standings
 fn update_faction_standings(env: &Env, winner: &Address, ...) {
-    // Gets faction from EpochUser, NOT from session! ✅
-    let epoch_user = storage::get_epoch_user(env, current_epoch, winner)?;
-    let faction = epoch_user.epoch_faction?;  // ← Real source of truth
+    // Gets faction from EpochPlayer, NOT from session! ✅
+    let epoch_player = storage::get_epoch_player(env, current_epoch, winner)?;
+    let faction = epoch_player.epoch_faction?;  // ← Real source of truth
     // Updates faction standings...
 }
 
@@ -145,7 +145,7 @@ let session = GameSession {
 
 **After:**
 ```rust
-// Lock factions for both players (stored in EpochUser.epoch_faction)
+// Lock factions for both players (stored in EpochPlayer.epoch_faction)
 lock_epoch_faction(env, player1, current_epoch)?;
 lock_epoch_faction(env, player2, current_epoch)?;
 
@@ -170,14 +170,14 @@ let session = GameSession {
 **Changes:**
 - Lines 136-138: Removed variable capture, call `lock_epoch_faction()` for side effects only
 - Lines 150-151: Removed field assignments from struct initialization
-- Updated comment to clarify factions are stored in `EpochUser.epoch_faction`
+- Updated comment to clarify factions are stored in `EpochPlayer.epoch_faction`
 
 ## Why This Is Safe
 
 ### 1. Factions Are Already Immutable Per Epoch
 ```rust
-// EpochUser struct (types.rs:49-70)
-pub struct EpochUser {
+// EpochPlayer struct (types.rs:49-70)
+pub struct EpochPlayer {
     pub epoch_faction: Option<u32>,  // ← Locked for entire epoch
     // ...
 }
@@ -186,16 +186,16 @@ pub struct EpochUser {
 // This is the single source of truth
 ```
 
-### 2. All Logic Uses EpochUser, Not GameSession
+### 2. All Logic Uses EpochPlayer, Not GameSession
 ```rust
 // game.rs:310-322 - Faction standings update
 fn update_faction_standings(env: &Env, winner: &Address, ...) {
-    let epoch_user = storage::get_epoch_user(env, current_epoch, winner)?;
-    let faction = epoch_user.epoch_faction?;  // ← Reads from EpochUser
+    let epoch_player = storage::get_epoch_player(env, current_epoch, winner)?;
+    let faction = epoch_player.epoch_faction?;  // ← Reads from EpochPlayer
     // Updates standings...
 }
 
-// rewards.rs - Reward claims also use EpochUser.epoch_faction
+// rewards.rs - Reward claims also use EpochPlayer.epoch_faction
 // No code reads GameSession faction fields
 ```
 
@@ -231,12 +231,12 @@ On blockchain where storage is expensive, this adds up!
 
 ### 2. **Single Source of Truth** 🎯
 **Before:**
-- Faction stored in 2 places: `EpochUser.epoch_faction` AND `GameSession.player1_faction`
+- Faction stored in 2 places: `EpochPlayer.epoch_faction` AND `GameSession.player1_faction`
 - Risk of desynchronization (though never actually used)
 - Confusion about which is authoritative
 
 **After:**
-- Faction stored in 1 place: `EpochUser.epoch_faction`
+- Faction stored in 1 place: `EpochPlayer.epoch_faction`
 - Clear single source of truth
 - No possibility of inconsistency
 
@@ -268,8 +268,8 @@ This change reflects proper database normalization principles:
 
 ### Where Faction Is Stored (Single Source)
 ```rust
-// storage.rs - DataKey::EpochUser(epoch, user)
-EpochUser {
+// storage.rs - DataKey::EpochPlayer(epoch, player)
+EpochPlayer {
     epoch_faction: Option<u32>,  // ← PRIMARY STORAGE
     // ...
 }
@@ -279,17 +279,17 @@ EpochUser {
 ```rust
 // 1. Locked during start_game
 lock_epoch_faction(env, player, current_epoch)?;
-// Stores in: EpochUser.epoch_faction
+// Stores in: EpochPlayer.epoch_faction
 
 // 2. Read during end_game → update_faction_standings
-let epoch_user = storage::get_epoch_user(env, current_epoch, winner)?;
-let faction = epoch_user.epoch_faction?;
-// Reads from: EpochUser.epoch_faction
+let epoch_player = storage::get_epoch_player(env, current_epoch, winner)?;
+let faction = epoch_player.epoch_faction?;
+// Reads from: EpochPlayer.epoch_faction
 
 // 3. Read during claim_yield
-let epoch_user = storage::get_epoch_user(env, epoch, user)?;
-let user_faction = epoch_user.epoch_faction?;
-// Reads from: EpochUser.epoch_faction
+let epoch_player = storage::get_epoch_player(env, epoch, player)?;
+let user_faction = epoch_player.epoch_faction?;
+// Reads from: EpochPlayer.epoch_faction
 ```
 
 ### What GameSession Stores (Game-Specific Only)
@@ -310,17 +310,17 @@ GameSession {
 
 **Principle**: Store each piece of data exactly once, in the most appropriate location.
 
-## User Question That Led to This Fix
+## Player Question That Led to This Fix
 
-> "Does it make sense to store the player faction in the game session itself? Seems like you could just store it per user per epoch as the user can't change their faction inside the current epoch."
+> "Does it make sense to store the player faction in the game session itself? Seems like you could just store it per player per epoch as the player can't change their faction inside the current epoch."
 
 **Answer**: You were 100% correct! The faction is:
-1. Already stored in `EpochUser.epoch_faction` (locked for epoch)
+1. Already stored in `EpochPlayer.epoch_faction` (locked for epoch)
 2. Cannot change during epoch (immutable after first game)
-3. Always read from `EpochUser`, never from `GameSession`
+3. Always read from `EpochPlayer`, never from `GameSession`
 4. Duplicating it in `GameSession` was pure waste
 
-This was a case where "historical record" thinking led to unnecessary duplication. The faction can always be looked up from `EpochUser` if needed for historical queries, and it's never used in contract logic from the session.
+This was a case where "historical record" thinking led to unnecessary duplication. The faction can always be looked up from `EpochPlayer` if needed for historical queries, and it's never used in contract logic from the session.
 
 ## Verification
 
@@ -351,7 +351,7 @@ stellar contract build
 
 **Impact on clients:**
 - If any client was reading `GameSession.player1_faction` or `player2_faction`, they'll get a compile error
-- However, these fields were never useful (same data in `EpochUser`)
+- However, these fields were never useful (same data in `EpochPlayer`)
 - No known legitimate use case for these fields
 
 **Migration:**
@@ -410,7 +410,7 @@ All game session functionality tested:
 - ⚠️ Unclear data model (which faction is authoritative?)
 
 ### After Optimization
-- ✅ Single source of truth (faction in EpochUser only)
+- ✅ Single source of truth (faction in EpochPlayer only)
 - ✅ No dead code (all fields used)
 - ✅ Minimal storage (no waste)
 - ✅ Clear data model (obvious where to look up faction)
@@ -435,7 +435,7 @@ All game session functionality tested:
 Successfully removed unused `player1_faction` and `player2_faction` fields from `GameSession`:
 - Reduced storage cost (16 bytes per session)
 - Eliminated dead code
-- Maintained single source of truth in `EpochUser.epoch_faction`
+- Maintained single source of truth in `EpochPlayer.epoch_faction`
 - All tests passing (72/72)
 - Contract builds successfully
 - Zero warnings
@@ -459,7 +459,7 @@ Store each piece of data exactly once. If data can be derived or looked up from 
 
 **Related Documents:**
 - `EPOCH-DATA-DEFAULTS-2025-11-07.md` - Epoch data default handling
-- `USER-QUERY-ERROR-HANDLING-2025-11-07.md` - UserNotFound error implementation
+- `USER-QUERY-ERROR-HANDLING-2025-11-07.md` - PlayerNotFound error implementation
 - `FACTION-SWITCHING-FLEXIBILITY-2025-11-07.md` - Faction preference flexibility
 - `UPDATE-CONFIG-ENHANCEMENT-2025-11-07.md` - Config update flexibility
 

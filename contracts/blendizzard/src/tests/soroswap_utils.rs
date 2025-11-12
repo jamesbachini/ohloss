@@ -77,7 +77,7 @@ pub fn create_router<'a>(env: &Env) -> SoroswapRouterClient<'a> {
 /// * `token_b` - Second token address
 /// * `amount_a` - Amount of token A to add
 /// * `amount_b` - Amount of token B to add
-/// * `user` - User providing liquidity
+/// * `player` - Player providing liquidity
 ///
 /// # Returns
 /// (amount_a, amount_b, liquidity) - Actual amounts added and LP tokens minted
@@ -88,7 +88,7 @@ pub fn add_liquidity<'a>(
     token_b: &Address,
     amount_a: i128,
     amount_b: i128,
-    user: &Address,
+    player: &Address,
 ) -> (i128, i128, i128) {
     let deadline = env.ledger().timestamp() + 1000;
 
@@ -96,7 +96,7 @@ pub fn add_liquidity<'a>(
         token_a, token_b, &amount_a, &amount_b,
         &0, // amount_a_min (accept any slippage for tests)
         &0, // amount_b_min
-        user, &deadline,
+        player, &deadline,
     )
 }
 
@@ -196,7 +196,7 @@ impl<'a> SoroswapTestSetup<'a> {
     }
 
     /// Add liquidity with default amounts (useful for quick setup)
-    pub fn add_default_liquidity(&self, user: &Address) -> (i128, i128, i128) {
+    pub fn add_default_liquidity(&self, player: &Address) -> (i128, i128, i128) {
         let amount_0 = 1_000_000_0000000; // 1M tokens
         let amount_1 = 1_000_000_0000000;
 
@@ -207,7 +207,7 @@ impl<'a> SoroswapTestSetup<'a> {
             &self.token_1.address,
             amount_0,
             amount_1,
-            user,
+            player,
         )
     }
 }
@@ -280,13 +280,13 @@ mod tests {
     #[test]
     fn test_add_liquidity() {
         let setup = SoroswapTestSetup::new();
-        let user = Address::generate(&setup.env);
+        let player = Address::generate(&setup.env);
 
-        // Mint tokens to user (following blend-together pattern)
-        setup.token_0.mint(&user, &10_000_000_0000000);
-        setup.token_1.mint(&user, &10_000_000_0000000);
+        // Mint tokens to player (following blend-together pattern)
+        setup.token_0.mint(&player, &10_000_000_0000000);
+        setup.token_1.mint(&player, &10_000_000_0000000);
 
-        let (amount_a, amount_b, liquidity) = setup.add_default_liquidity(&user);
+        let (amount_a, amount_b, liquidity) = setup.add_default_liquidity(&player);
 
         assert!(amount_a > 0);
         assert!(amount_b > 0);

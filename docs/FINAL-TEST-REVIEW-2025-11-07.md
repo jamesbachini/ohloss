@@ -197,7 +197,7 @@ The test suite is production-ready with:
    - Currently relies on standard Soroban pattern
 
 2. **Load Testing** (Testnet)
-   - Test with many simultaneous users
+   - Test with many simultaneous players
    - Validate gas costs at scale
 
 3. **Gas Profiling** (Optimization)

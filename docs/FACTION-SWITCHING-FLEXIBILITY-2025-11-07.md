@@ -2,7 +2,7 @@
 
 ## Summary
 
-✅ **ENHANCED** - Users can now change their faction preference at ANY time
+✅ **ENHANCED** - Players can now change their faction preference at ANY time
 
 **Changes**: 3 files modified
 **Tests**: 72/72 passing ✅ (updated 1 test)
@@ -11,25 +11,25 @@
 
 ## Problem Identified
 
-Users were previously **locked out** of changing their faction preference after starting their first game in an epoch, even though the change would only affect future epochs.
+Players were previously **locked out** of changing their faction preference after starting their first game in an epoch, even though the change would only affect future epochs.
 
 ### Issue Details
 
 **Before Enhancement:**
 ```rust
 // faction.rs - select_faction function
-pub(crate) fn select_faction(env: &Env, user: &Address, faction: u32) -> Result<(), Error> {
+pub(crate) fn select_faction(env: &Env, player: &Address, faction: u32) -> Result<(), Error> {
     // Validate faction
     if !Faction::is_valid(faction) {
         return Err(Error::InvalidFaction);
     }
 
-    user.require_auth();
+    player.require_auth();
 
-    // Check if user has already locked their faction for this epoch
+    // Check if player has already locked their faction for this epoch
     let current_epoch = storage::get_current_epoch(env);
-    if let Some(epoch_user) = storage::get_epoch_user(env, current_epoch, user) {
-        if epoch_user.epoch_faction.is_some() {
+    if let Some(epoch_player) = storage::get_epoch_player(env, current_epoch, player) {
+        if epoch_player.epoch_faction.is_some() {
             return Err(Error::FactionAlreadyLocked); // ← BLOCKING CHANGE
         }
     }
@@ -39,20 +39,20 @@ pub(crate) fn select_faction(env: &Env, user: &Address, faction: u32) -> Result<
 ```
 
 **Problems:**
-- ❌ Users couldn't change their persistent faction preference after first game
+- ❌ Players couldn't change their persistent faction preference after first game
 - ❌ Confusing UX: "Why can't I prepare my faction for next epoch?"
 - ❌ No flexibility to adjust strategy between epochs
 - ❌ Unnecessary restriction (doesn't affect current epoch anyway)
 
-**User Experience:**
+**Player Experience:**
 ```
 Epoch 1:
-  User: Selects WholeNoodle faction
-  User: Plays a game (faction locked to WholeNoodle for Epoch 1)
-  User: "Wait, I want to be PointyStick next epoch!"
-  User: Tries to select PointyStick
+  Player: Selects WholeNoodle faction
+  Player: Plays a game (faction locked to WholeNoodle for Epoch 1)
+  Player: "Wait, I want to be PointyStick next epoch!"
+  Player: Tries to select PointyStick
   Contract: ❌ ERROR: FactionAlreadyLocked
-  User: "But I want to change for NEXT epoch, not this one..."
+  Player: "But I want to change for NEXT epoch, not this one..."
 ```
 
 ## Architecture
@@ -61,34 +61,34 @@ The contract has **TWO separate faction storage locations**:
 
 ### 1. Persistent Faction Preference
 ```rust
-// types.rs - User struct
-pub struct User {
+// types.rs - Player struct
+pub struct Player {
     pub selected_faction: u32,  // ← Persistent preference (for future epochs)
     pub total_deposited: i128,
     pub deposit_timestamp: u64,
 }
 ```
-- Stored in: `DataKey::User(Address)`
-- Purpose: User's faction preference for **future epochs**
+- Stored in: `DataKey::Player(Address)`
+- Purpose: Player's faction preference for **future epochs**
 - Can change: **ANYTIME**
 
 ### 2. Epoch-Locked Faction
 ```rust
-// types.rs - EpochUser struct
-pub struct EpochUser {
+// types.rs - EpochPlayer struct
+pub struct EpochPlayer {
     pub epoch_faction: Option<u32>,  // ← Locked for THIS epoch
     pub available_fp: i128,
     // ...
 }
 ```
-- Stored in: `DataKey::EpochUser(u32, Address)`
-- Purpose: User's locked faction for **current epoch**
+- Stored in: `DataKey::EpochPlayer(u32, Address)`
+- Purpose: Player's locked faction for **current epoch**
 - Can change: **NEVER** (once locked on first game)
 
 ### Key Insight
 
 These are **completely separate**:
-- Changing `User.selected_faction` does NOT affect `EpochUser.epoch_faction`
+- Changing `Player.selected_faction` does NOT affect `EpochPlayer.epoch_faction`
 - The restriction was unnecessary - we were blocking changes to the persistent preference based on the epoch lock
 
 ## Changes Made
@@ -96,23 +96,23 @@ These are **completely separate**:
 ### 1. faction.rs - Removed lock check from select_faction
 
 ```diff
- /// Select a faction for the user
+ /// Select a faction for the player
  ///
--/// This sets the user's persistent faction preference. The user can change
+-/// This sets the player's persistent faction preference. The player can change
 -/// their faction selection at any time UNLESS they have already started playing
 -/// games in the current epoch (epoch_faction is locked).
-+/// This sets the user's persistent faction preference for future epochs.
-+/// Users can change their faction selection at ANY time - this updates their
++/// This sets the player's persistent faction preference for future epochs.
++/// Players can change their faction selection at ANY time - this updates their
 +/// preference but does NOT affect the current epoch if already locked.
  ///
 -/// From PLAN.md and OG_PLAN.md:
--/// - "Allow the user to select a faction"
--/// - "This should go to a persistent user entry so it persists across epochs"
--/// - "Do not allow a user to select a faction after the epoch has started unless
+-/// - "Allow the player to select a faction"
+-/// - "This should go to a persistent player entry so it persists across epochs"
+-/// - "Do not allow a player to select a faction after the epoch has started unless
 -///    it is their first action for the epoch (hasn't played any games yet)"
 +/// Architecture:
-+/// - `User.selected_faction` - Persistent preference (can always change)
-+/// - `EpochUser.epoch_faction` - Locked for current epoch on first game (cannot change)
++/// - `Player.selected_faction` - Persistent preference (can always change)
++/// - `EpochPlayer.epoch_faction` - Locked for current epoch on first game (cannot change)
 +///
 +/// Behavior:
 +/// - Changing faction updates your persistent preference immediately
@@ -122,31 +122,31 @@ These are **completely separate**:
  ///
  /// # Arguments
  /// * `env` - Contract environment
- /// * `user` - User selecting the faction
+ /// * `player` - Player selecting the faction
  /// * `faction` - Faction ID (0=WholeNoodle, 1=PointyStick, 2=SpecialRock)
  ///
  /// # Errors
  /// * `InvalidFaction` - If faction ID is not 0, 1, or 2
--/// * `FactionAlreadyLocked` - If user has already played a game this epoch
- pub(crate) fn select_faction(env: &Env, user: &Address, faction: u32) -> Result<(), Error> {
+-/// * `FactionAlreadyLocked` - If player has already played a game this epoch
+ pub(crate) fn select_faction(env: &Env, player: &Address, faction: u32) -> Result<(), Error> {
      // Validate faction
      if !Faction::is_valid(faction) {
          return Err(Error::InvalidFaction);
      }
 
-     // Authenticate user
-     user.require_auth();
+     // Authenticate player
+     player.require_auth();
 
--    // Check if user has already locked their faction for this epoch
+-    // Check if player has already locked their faction for this epoch
 -    let current_epoch = storage::get_current_epoch(env);
--    if let Some(epoch_user) = storage::get_epoch_user(env, current_epoch, user) {
--        if epoch_user.epoch_faction.is_some() {
+-    if let Some(epoch_player) = storage::get_epoch_player(env, current_epoch, player) {
+-        if epoch_player.epoch_faction.is_some() {
 -            return Err(Error::FactionAlreadyLocked);
 -        }
 -    }
 -
-     // Get or create user data
-     let mut user_data = storage::get_user(env, user).unwrap_or_else(|| crate::types::User {
+     // Get or create player data
+     let mut player_data = storage::get_player(env, player).unwrap_or_else(|| crate::types::Player {
          selected_faction: faction,
          total_deposited: 0,
          deposit_timestamp: 0,
@@ -154,13 +154,13 @@ These are **completely separate**:
 
 -    // Update faction selection
 +    // Update faction selection (always allowed - affects future epochs)
-     user_data.selected_faction = faction;
+     player_data.selected_faction = faction;
 
-     // Save user data
-     storage::set_user(env, user, &user_data);
+     // Save player data
+     storage::set_player(env, player, &player_data);
 
      // Emit event
-     emit_faction_selected(env, user, faction);
+     emit_faction_selected(env, player, faction);
 
      Ok(())
  }
@@ -175,11 +175,11 @@ These are **completely separate**:
 ### 2. lib.rs - Updated public API documentation
 
 ```diff
- /// Select a faction for the user
+ /// Select a faction for the player
  ///
--/// Sets the user's persistent faction preference. Can be changed between
+-/// Sets the player's persistent faction preference. Can be changed between
 -/// epochs but not after starting a game in the current epoch.
-+/// Sets the user's persistent faction preference. Can be changed at ANY time.
++/// Sets the player's persistent faction preference. Can be changed at ANY time.
 +/// If you haven't played a game this epoch, the new faction applies immediately.
 +/// If you've already played this epoch, the current epoch stays locked to your
 +/// old faction, and the new selection applies starting next epoch.
@@ -189,8 +189,8 @@ These are **completely separate**:
  ///
  /// # Errors
  /// * `InvalidFaction` - If faction ID is not 0, 1, or 2
--/// * `FactionAlreadyLocked` - If user has already played a game this epoch
- pub fn select_faction(env: Env, user: Address, faction: u32) -> Result<(), Error> {
+-/// * `FactionAlreadyLocked` - If player has already played a game this epoch
+ pub fn select_faction(env: Env, player: Address, faction: u32) -> Result<(), Error> {
 ```
 
 **Lines Changed**:
@@ -263,7 +263,7 @@ fn test_can_change_faction_but_epoch_stays_locked() {
 ```
 
 **Test Verifies**:
-1. ✅ User can change faction after game starts (no panic)
+1. ✅ Player can change faction after game starts (no panic)
 2. ✅ Persistent preference updates correctly
 3. ✅ Current epoch faction remains locked to original
 4. ✅ Separation between persistent and epoch-specific data
@@ -273,8 +273,8 @@ fn test_can_change_faction_but_epoch_stays_locked() {
 ### Code Analysis
 
 ✅ **Complete separation maintained**:
-- `User.selected_faction` - can change anytime
-- `EpochUser.epoch_faction` - locked on first game, never changes
+- `Player.selected_faction` - can change anytime
+- `EpochPlayer.epoch_faction` - locked on first game, never changes
 - No logic depends on the removed check
 - All faction locking happens via `lock_epoch_faction()` (unchanged)
 
@@ -313,30 +313,30 @@ stellar contract build
 
 ## Benefits
 
-### 1. **User Experience** 🎮
+### 1. **Player Experience** 🎮
 
 **Before**:
-- User locks faction → Realizes wrong choice → Stuck until next epoch
+- Player locks faction → Realizes wrong choice → Stuck until next epoch
 - Cannot prepare faction preference for next epoch in advance
 - Confusing error message
 
 **After**:
-- User can always adjust faction preference
+- Player can always adjust faction preference
 - Can prepare for next epoch while playing current one
 - Clear separation between "current epoch" and "future preference"
 
-**User Flow**:
+**Player Flow**:
 ```
 Epoch 1:
-  User: Selects WholeNoodle faction
-  User: Plays a game (faction locked to WholeNoodle for Epoch 1)
-  User: "Wait, I want to be PointyStick next epoch!"
-  User: Selects PointyStick
+  Player: Selects WholeNoodle faction
+  Player: Plays a game (faction locked to WholeNoodle for Epoch 1)
+  Player: "Wait, I want to be PointyStick next epoch!"
+  Player: Selects PointyStick
   Contract: ✅ SUCCESS - Preference updated
-  User: Continues playing Epoch 1 as WholeNoodle
+  Player: Continues playing Epoch 1 as WholeNoodle
 
 Epoch 2:
-  User: First game uses PointyStick faction ✅
+  Player: First game uses PointyStick faction ✅
 ```
 
 ### 2. **Strategic Flexibility** 🎯
@@ -372,30 +372,30 @@ Epoch 2:
 ### Scenario 1: No Games Played Yet
 
 ```
-User.selected_faction = 0 (WholeNoodle)
-EpochUser.epoch_faction = None
+Player.selected_faction = 0 (WholeNoodle)
+EpochPlayer.epoch_faction = None
 
-User calls: select_faction(2) // SpecialRock
+Player calls: select_faction(2) // SpecialRock
 
 Result:
-  User.selected_faction = 2 (SpecialRock) ✅
-  EpochUser.epoch_faction = None (still unlocked) ✅
+  Player.selected_faction = 2 (SpecialRock) ✅
+  EpochPlayer.epoch_faction = None (still unlocked) ✅
 
 Next game starts:
-  EpochUser.epoch_faction = 2 (SpecialRock) ✅ Uses new preference
+  EpochPlayer.epoch_faction = 2 (SpecialRock) ✅ Uses new preference
 ```
 
 ### Scenario 2: After First Game (Locked)
 
 ```
-User.selected_faction = 0 (WholeNoodle)
-EpochUser.epoch_faction = Some(0) // Locked to WholeNoodle
+Player.selected_faction = 0 (WholeNoodle)
+EpochPlayer.epoch_faction = Some(0) // Locked to WholeNoodle
 
-User calls: select_faction(2) // SpecialRock
+Player calls: select_faction(2) // SpecialRock
 
 Result:
-  User.selected_faction = 2 (SpecialRock) ✅ Preference updated
-  EpochUser.epoch_faction = Some(0) ✅ STILL WholeNoodle (locked)
+  Player.selected_faction = 2 (SpecialRock) ✅ Preference updated
+  EpochPlayer.epoch_faction = Some(0) ✅ STILL WholeNoodle (locked)
 
 This Epoch:
   All games use faction 0 (WholeNoodle) ✅
@@ -407,17 +407,17 @@ Next Epoch:
 ### Scenario 3: Multiple Changes
 
 ```
-User.selected_faction = 0 (WholeNoodle)
-EpochUser.epoch_faction = Some(0) // Locked
+Player.selected_faction = 0 (WholeNoodle)
+EpochPlayer.epoch_faction = Some(0) // Locked
 
-User calls: select_faction(1) // PointyStick
-  Result: User.selected_faction = 1 ✅
+Player calls: select_faction(1) // PointyStick
+  Result: Player.selected_faction = 1 ✅
 
-User calls: select_faction(2) // SpecialRock
-  Result: User.selected_faction = 2 ✅
+Player calls: select_faction(2) // SpecialRock
+  Result: Player.selected_faction = 2 ✅
 
-User calls: select_faction(0) // WholeNoodle
-  Result: User.selected_faction = 0 ✅
+Player calls: select_faction(0) // WholeNoodle
+  Result: Player.selected_faction = 0 ✅
 
 All allowed! Last call wins for next epoch.
 Current epoch still locked to original: Some(0) ✅
@@ -435,7 +435,7 @@ Current epoch still locked to original: Some(0) ✅
 
 ### Exploit Prevention
 
-**Question**: Can users exploit this to switch to winning faction mid-epoch?
+**Question**: Can players exploit this to switch to winning faction mid-epoch?
 
 **Answer**: ❌ NO
 
@@ -455,8 +455,8 @@ Player tries to exploit:
   select_faction(1) // Switch to PointyStick
 
 Result:
-  User.selected_faction = 1 ✅ (for NEXT epoch)
-  EpochUser.epoch_faction = Some(0) ✅ (STILL WholeNoodle)
+  Player.selected_faction = 1 ✅ (for NEXT epoch)
+  EpochPlayer.epoch_faction = Some(0) ✅ (STILL WholeNoodle)
   Player's FP still counts for WholeNoodle ✅
 
 Exploit: FAILED ✅
@@ -480,13 +480,13 @@ Exploit: FAILED ✅
 **For existing deployments**:
 - Works immediately after upgrade
 - Existing locked factions remain locked
-- Users gain ability to change preference
+- Players gain ability to change preference
 - No data migration needed
 
 ### API Compatibility
 
 ✅ **Backward compatible enhancement**:
-- Function signature unchanged: `select_faction(env, user, faction)`
+- Function signature unchanged: `select_faction(env, player, faction)`
 - Return type unchanged: `Result<(), Error>`
 - Only change: Removed one error case (FactionAlreadyLocked)
 
@@ -498,14 +498,14 @@ Exploit: FAILED ✅
 **Example**:
 ```rust
 // Old client code
-match client.select_faction(&user, &faction) {
+match client.select_faction(&player, &faction) {
     Ok(()) => println!("Faction selected"),
     Err(Error::FactionAlreadyLocked) => println!("Cannot change"), // ← Never happens now
     Err(e) => println!("Error: {:?}", e),
 }
 
 // New client code (cleaner)
-match client.select_faction(&user, &faction) {
+match client.select_faction(&player, &faction) {
     Ok(()) => println!("Faction selected"),
     Err(e) => println!("Error: {:?}", e),
 }
@@ -514,12 +514,12 @@ match client.select_faction(&user, &faction) {
 ### Performance Impact
 
 ✅ **Performance improvement**:
-- Removed one storage read (`get_epoch_user` check)
+- Removed one storage read (`get_epoch_player` check)
 - Faster faction selection (less work)
 - No negative impacts
 
-**Before**: Read User + Read EpochUser (to check lock)
-**After**: Read User only
+**Before**: Read Player + Read EpochPlayer (to check lock)
+**After**: Read Player only
 
 ## Testing Coverage
 
@@ -577,7 +577,7 @@ Updated comments to clarify:
 **Status**: ✅ **ENHANCED AND VERIFIED**
 
 The faction selection flexibility has been significantly improved:
-- Users can change faction preference at any time
+- Players can change faction preference at any time
 - Current epoch faction remains properly locked
 - Persistent preference separated from epoch-specific lock
 - All tests passing (72/72)
@@ -586,13 +586,13 @@ The faction selection flexibility has been significantly improved:
 - Better UX and performance
 
 **Quality Score**: Excellent
-- User experience: ✅ (flexible, clear)
+- Player experience: ✅ (flexible, clear)
 - Security: ✅ (epoch integrity maintained)
 - Performance: ✅ (one less storage read)
 - Code clarity: ✅ (clear separation)
 - Testing: ✅ (comprehensive coverage)
 
-**User Benefits**:
+**Player Benefits**:
 - Can adjust faction preference anytime
 - Can prepare for next epoch during current one
 - No confusion about "why can't I change?"
@@ -615,4 +615,4 @@ The faction selection flexibility has been significantly improved:
 - `FINAL-TEST-REVIEW-2025-11-07.md` - Comprehensive test review
 
 **Design Pattern**:
-Separate persistent preferences from epoch-specific state. Users should always be able to update their preferences for future epochs without affecting current epoch integrity.
+Separate persistent preferences from epoch-specific state. Players should always be able to update their preferences for future epochs without affecting current epoch integrity.

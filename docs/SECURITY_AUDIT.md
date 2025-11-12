@@ -12,7 +12,7 @@
 
 ### ✅ High Priority Issue #1: Withdrawal Reset Timing Exploit - FIXED
 - **Fix Applied**: `vault.rs:59-76` - Added withdrawal tracking reset on re-deposit
-- **Implementation**: When user deposits during an epoch with prior withdrawals, `withdrawn_this_epoch` is reset to 0 and `initial_epoch_balance` is updated
+- **Implementation**: When player deposits during an epoch with prior withdrawals, `withdrawn_this_epoch` is reset to 0 and `initial_epoch_balance` is updated
 - **Tests Added**: 3 comprehensive security tests validating the fix (`src/tests/security.rs:22-161`)
 - **Verification**: All withdrawal reset tests passing ✅
 
@@ -43,7 +43,7 @@ The Blendizzard contract has been thoroughly reviewed for security vulnerabiliti
 
 ### ✅ None Found
 
-No critical vulnerabilities that would put user funds at immediate risk were identified.
+No critical vulnerabilities that would put player funds at immediate risk were identified.
 
 ---
 
@@ -57,13 +57,13 @@ No critical vulnerabilities that would put user funds at immediate risk were ide
 **Issue**: The withdrawal reset threshold check happens AFTER the withdrawal is processed. This allows a sophisticated attack:
 
 **Attack Scenario**:
-1. User has 1000 USDC deposited with high time multiplier (30+ days)
-2. User has accumulated significant FP (e.g., 1500 FP with 1.5x time multiplier)
-3. User withdraws 499 USDC (49.9% - just under threshold)
-4. User immediately re-deposits 499 USDC
-5. User's FP remains high (time multiplier preserved)
-6. User repeats: withdraw 499, redeposit 499
-7. User can extract their capital multiple times per epoch without FP reset
+1. Player has 1000 USDC deposited with high time multiplier (30+ days)
+2. Player has accumulated significant FP (e.g., 1500 FP with 1.5x time multiplier)
+3. Player withdraws 499 USDC (49.9% - just under threshold)
+4. Player immediately re-deposits 499 USDC
+5. Player's FP remains high (time multiplier preserved)
+6. Player repeats: withdraw 499, redeposit 499
+7. Player can extract their capital multiple times per epoch without FP reset
 
 **Impact**: Undermines the withdrawal reset mechanism designed to prevent gaming the system.
 
@@ -74,16 +74,16 @@ No critical vulnerabilities that would put user funds at immediate risk were ide
 // SECURITY FIX in vault.rs:59-76
 // Reset withdrawal tracking if re-depositing during same epoch
 let current_epoch = storage::get_current_epoch(env);
-if let Some(mut epoch_user) = storage::get_epoch_user(env, current_epoch, user) {
-    // User has activity this epoch - reset their withdrawal counter
+if let Some(mut epoch_player) = storage::get_epoch_player(env, current_epoch, player) {
+    // Player has activity this epoch - reset their withdrawal counter
     // This ensures they can't game the 50% threshold by cycling deposits/withdrawals
-    epoch_user.withdrawn_this_epoch = 0;
+    epoch_player.withdrawn_this_epoch = 0;
 
     // Update their initial_epoch_balance to reflect the new deposit
     // This ensures the 50% threshold is calculated against current balance
-    epoch_user.initial_epoch_balance = user_data.total_deposited + amount;
+    epoch_player.initial_epoch_balance = player_data.total_deposited + amount;
 
-    storage::set_epoch_user(env, current_epoch, user, &epoch_user);
+    storage::set_epoch_player(env, current_epoch, player, &epoch_player);
 }
 ```
 
@@ -109,7 +109,7 @@ if let Some(mut epoch_user) = storage::get_epoch_user(env, current_epoch, user) 
 1. Soroswap experiences temporary issues (liquidity drained, oracle failure)
 2. cycle_epoch() is called but swap fails
 3. Epoch cannot be finalized
-4. Users cannot claim rewards or start new games
+4. Players cannot claim rewards or start new games
 5. Protocol is effectively frozen until issue resolves
 
 **Impact**: Protocol can be temporarily frozen by external contract failures.
@@ -135,7 +135,7 @@ let reward_pool = match withdraw_and_convert_rewards(env) {
 **Impact of Fix**:
 - Epoch cycling now succeeds even if BLND→USDC swap fails
 - Protocol cannot be frozen by external contract failures
-- Users can still play games and make deposits/withdrawals
+- Players can still play games and make deposits/withdrawals
 - Winning faction receives no rewards if swap fails (reward_pool = 0)
 
 **Additional Mitigations**:
@@ -154,16 +154,16 @@ let reward_pool = match withdraw_and_convert_rewards(env) {
 
 **Location**: `contracts/blendizzard/src/vault.rs:187-191`
 
-**Issue**: When a user withdraws >50% of their balance, their FP is recalculated with the new timestamp. However, the calculation uses their NEW (reduced) total_deposited amount, not their initial amount.
+**Issue**: When a player withdraws >50% of their balance, their FP is recalculated with the new timestamp. However, the calculation uses their NEW (reduced) total_deposited amount, not their initial amount.
 
 **Example**:
-1. User deposits 1000 USDC, plays games, accumulates 1500 FP
-2. User has 300 FP locked in active games, 1200 FP available
-3. User withdraws 600 USDC (60%)
-4. FP recalculated: `new_fp = calculate_faction_points(env, user)` uses 400 USDC (new balance)
+1. Player deposits 1000 USDC, plays games, accumulates 1500 FP
+2. Player has 300 FP locked in active games, 1200 FP available
+3. Player withdraws 600 USDC (60%)
+4. FP recalculated: `new_fp = calculate_faction_points(env, player)` uses 400 USDC (new balance)
 5. New FP ≈ 400 FP (1.0x time multiplier * 1.0x amount multiplier)
 6. Available FP = 400 - 300 = 100 FP
-7. **BUG**: User's locked 300 FP in active games is now based on OLD balance (1000 USDC) but their available FP is based on NEW balance (400 USDC)
+7. **BUG**: Player's locked 300 FP in active games is now based on OLD balance (1000 USDC) but their available FP is based on NEW balance (400 USDC)
 
 **Recommendation**: Consider whether locked FP should also be adjusted proportionally on withdrawal reset, or prevent withdrawals while games are active.
 
@@ -177,7 +177,7 @@ let reward_pool = match withdraw_and_convert_rewards(env) {
 
 **Example**:
 - Reward pool: 1000.0000000 USDC
-- 10 users each contributed 10% of FP
+- 10 players each contributed 10% of FP
 - Each receives: `1000.0000000 * 0.1 = 100.0000000` (ideal)
 - With floor: Each receives: `99.9999999` USDC (possibly)
 - Total claimed: `999.9999990` USDC
@@ -208,35 +208,35 @@ pub fn admin_sweep_dust(env: Env, recipient: Address) -> Result<(), Error> {
 
 **Location**: `contracts/blendizzard/src/vault.rs:54, 116`
 
-**Issue**: The contract tracks `user_data.total_deposited` separately from the actual fee-vault shares. If fee-vault returns different amounts due to fees or exchange rate changes, there's no reconciliation.
+**Issue**: The contract tracks `player_data.total_deposited` separately from the actual fee-vault shares. If fee-vault returns different amounts due to fees or exchange rate changes, there's no reconciliation.
 
 **Code Analysis**:
 ```rust
 // deposit() line 54
-let _shares = vault_client.deposit(user, &amount);
+let _shares = vault_client.deposit(player, &amount);
 // Ignores shares, assumes 1:1 tracking
 
 // withdraw() line 116
-let _underlying_withdrawn = vault_client.withdraw(user, &amount);
+let _underlying_withdrawn = vault_client.withdraw(player, &amount);
 // Ignores actual amount withdrawn
 ```
 
 **Scenario**:
-1. User deposits 1000 USDC
-2. Fee-vault charges 0.1% fee, user receives 999 USDC worth of shares
+1. Player deposits 1000 USDC
+2. Fee-vault charges 0.1% fee, player receives 999 USDC worth of shares
 3. Contract tracks 1000 USDC (wrong)
-4. User withdraws 1000 USDC
+4. Player withdraws 1000 USDC
 5. Fee-vault cannot fulfill (only has 999 USDC)
 6. Withdrawal fails
 
 **Recommendation**:
 ```rust
 // Store actual shares and convert when needed
-let shares = vault_client.deposit(user, &amount);
-user_data.total_shares = user_data.total_shares.checked_add(shares)?;
+let shares = vault_client.deposit(player, &amount);
+player_data.total_shares = player_data.total_shares.checked_add(shares)?;
 
 // On withdrawal, use shares not amounts
-let amount_withdrawn = vault_client.withdraw_shares(user, &user_data.total_shares);
+let amount_withdrawn = vault_client.withdraw_shares(player, &player_data.total_shares);
 ```
 
 **Severity**: Medium - Depends on fee-vault implementation. If fee-vault is 1:1 with no fees, this is fine. But should be verified.
@@ -253,7 +253,7 @@ let amount_withdrawn = vault_client.withdraw_shares(user, &user_data.total_share
 1. Attacker creates 10,000 game sessions with 1 unit wagers
 2. Wins all games (if attacker controls both players)
 3. Faction standings show 10,000 units contributed
-4. Legitimate users' contributions are diluted in percentage terms
+4. Legitimate players' contributions are diluted in percentage terms
 
 **Impact**: Spam games could manipulate perception of faction strength, though rewards are still proportional.
 
@@ -349,11 +349,11 @@ update_faction_standings(env, winner, fp_amount, session.epoch)?;
 
 **Location**: `contracts/blendizzard/src/vault.rs:35-76`
 
-**Issue**: Users can deposit unlimited amounts, potentially gaining disproportionate FP and dominance.
+**Issue**: Players can deposit unlimited amounts, potentially gaining disproportionate FP and dominance.
 
 **Impact**: While mathematically fair (FP scales with deposit), a whale could dominate all games.
 
-**Recommendation**: Consider per-user or per-epoch deposit caps for fairness. However, this is a design choice not a security flaw.
+**Recommendation**: Consider per-player or per-epoch deposit caps for fairness. However, this is a design choice not a security flaw.
 
 ---
 
@@ -373,17 +373,17 @@ update_faction_standings(env, winner, fp_amount, session.epoch)?;
 
 **Location**: `contracts/blendizzard/src/vault.rs:64-67`
 
-**Issue**: When user makes second deposit, `deposit_timestamp` is not updated. Time multiplier is always calculated from FIRST deposit.
+**Issue**: When player makes second deposit, `deposit_timestamp` is not updated. Time multiplier is always calculated from FIRST deposit.
 
 **Scenario**:
-1. User deposits 100 USDC at t=0
-2. User waits 30 days (t=2592000)
-3. User deposits another 1000 USDC at t=2592000
-4. User's time multiplier is 1.5x based on 30 days
-5. User's amount multiplier is based on 1100 USDC total
-6. User gets high FP for the 1000 USDC that was only deposited for seconds
+1. Player deposits 100 USDC at t=0
+2. Player waits 30 days (t=2592000)
+3. Player deposits another 1000 USDC at t=2592000
+4. Player's time multiplier is 1.5x based on 30 days
+5. Player's amount multiplier is based on 1100 USDC total
+6. Player gets high FP for the 1000 USDC that was only deposited for seconds
 
-**Impact**: Users can game timing by depositing small amounts early, then large amounts later while keeping old timestamp.
+**Impact**: Players can game timing by depositing small amounts early, then large amounts later while keeping old timestamp.
 
 **Recommendation**: Consider weighted average timestamp or reset on large deposits. However, current design may be intentional to reward long-term holders.
 
@@ -410,7 +410,7 @@ update_faction_standings(env, winner, fp_amount, session.epoch)?;
 ### ✅ Emergency Controls
 - Pause/unpause mechanism properly implemented
 - Admin can upgrade contract if critical bug found
-- User funds remain accessible during pause (can't be locked)
+- Player funds remain accessible during pause (can't be locked)
 
 ### ✅ Storage TTL Management
 - Proper TTL extension on reads/writes
@@ -492,8 +492,8 @@ update_faction_standings(env, winner, fp_amount, session.epoch)?;
 
 5. **Edge Case Tests**:
    - Zero BLND yield scenario
-   - All users in one faction
-   - Single user claiming all rewards
+   - All players in one faction
+   - Single player claiming all rewards
 
 ---
 

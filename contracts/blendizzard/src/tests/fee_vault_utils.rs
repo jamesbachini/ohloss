@@ -88,7 +88,7 @@ pub enum MockVaultDataKey {
     AdminBalance,
     /// Emissions available for claiming per reserve token ID
     Emissions(u32),
-    /// User underlying token balance (for cross-epoch architecture)
+    /// Player underlying token balance (for cross-epoch architecture)
     UserBalance(Address),
 }
 
@@ -112,10 +112,10 @@ impl MockVault {
         0
     }
 
-    /// Mock get_underlying_tokens - returns stored user balance
+    /// Mock get_underlying_tokens - returns stored player balance
     /// This is the key method for cross-epoch balance tracking
-    pub fn get_underlying_tokens(env: Env, user: Address) -> i128 {
-        let key = MockVaultDataKey::UserBalance(user);
+    pub fn get_underlying_tokens(env: Env, player: Address) -> i128 {
+        let key = MockVaultDataKey::UserBalance(player);
         env.storage()
             .instance()
             .get::<MockVaultDataKey, i128>(&key)
@@ -205,12 +205,12 @@ impl MockVault {
             .set(&MockVaultDataKey::Emissions(reserve_token_id), &amount);
     }
 
-    /// Set user balance for testing (cross-epoch architecture)
-    /// This is a test-only function to configure user balances in the mock vault
-    pub fn set_user_balance(env: Env, user: Address, amount: i128) {
+    /// Set player balance for testing (cross-epoch architecture)
+    /// This is a test-only function to configure player balances in the mock vault
+    pub fn set_user_balance(env: Env, player: Address, amount: i128) {
         env.storage()
             .instance()
-            .set(&MockVaultDataKey::UserBalance(user), &amount);
+            .set(&MockVaultDataKey::UserBalance(player), &amount);
     }
 }
 
@@ -275,13 +275,13 @@ pub fn create_mock_pool(env: &Env) -> Address {
 // ============================================================================
 
 /// Deposit assets into fee vault
-pub fn deposit_to_vault(vault: &FeeVaultClient, user: &Address, amount: i128) -> i128 {
-    vault.deposit(user, &amount)
+pub fn deposit_to_vault(vault: &FeeVaultClient, player: &Address, amount: i128) -> i128 {
+    vault.deposit(player, &amount)
 }
 
-/// Get shares for a user
-pub fn get_vault_shares(vault: &FeeVaultClient, user: &Address) -> i128 {
-    vault.get_shares(user)
+/// Get shares for a player
+pub fn get_vault_shares(vault: &FeeVaultClient, player: &Address) -> i128 {
+    vault.get_shares(player)
 }
 
 /// Admin withdraw from vault (for yield distribution)

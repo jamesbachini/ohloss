@@ -5,7 +5,7 @@
 **Implemented**: December 2024
 
 This document reflects the **cross-epoch balance tracking architecture**:
-- Users deposit/withdraw directly to fee-vault-v2 (no intermediate Blendizzard calls)
+- Players deposit/withdraw directly to fee-vault-v2 (no intermediate Blendizzard calls)
 - Balances queried from vault at first game of each epoch
 - FP calculated once per epoch and remains valid until next epoch
 - 50% withdrawal rule enforced via cross-epoch comparison (not within-epoch)
@@ -49,7 +49,7 @@ fp = base_deposit_amount × amount_multiplier(deposit_amount) × time_multiplier
 ```rust
 // Example formula (adjust curve parameters as needed)
 // Using 7 decimal fixed point (e.g., 1.0 = 10_000_000)
-let amount_usd = get_deposit_value_usd(user_deposit);
+let amount_usd = get_deposit_value_usd(player_deposit);
 let max_amount = 1000_0000000; // $1,000 in 7 decimals
 let multiplier = FIXED_POINT_ONE + ((amount_usd * FIXED_POINT_ONE) / (amount_usd + max_amount));
 // Results in 1.0x at $0, ~1.5x at $1k, ~1.75x at $3k, ~1.9x at $9k
@@ -83,13 +83,13 @@ let multiplier = FIXED_POINT_ONE + ((time_held_seconds * FIXED_POINT_ONE) / (tim
 **Key Functions Used:**
 ```rust
 // Deposit underlying assets, receive shares
-deposit(user: Address, amount: i128) -> i128
+deposit(player: Address, amount: i128) -> i128
 
 // Withdraw underlying assets, burn shares
-withdraw(user: Address, amount: i128) -> i128
+withdraw(player: Address, amount: i128) -> i128
 
-// Get user's underlying token balance
-get_underlying_tokens(user: Address) -> i128
+// Get player's underlying token balance
+get_underlying_tokens(player: Address) -> i128
 
 // Admin: withdraw accumulated fees (BLND)
 admin_withdraw(amount: i128) -> i128
@@ -99,8 +99,8 @@ get_underlying_admin_balance() -> i128
 ```
 
 **Integration Pattern:**
-- Users deposit/withdraw directly to fee-vault-v2 (no Blendizzard intermediation)
-- Blendizzard queries user balances via `get_underlying_tokens()` at game start
+- Players deposit/withdraw directly to fee-vault-v2 (no Blendizzard intermediation)
+- Blendizzard queries player balances via `get_underlying_tokens()` at game start
 - Admin of fee-vault is set to Blendizzard contract
 - Blendizzard can withdraw admin fees during epoch cycling via `admin_withdraw()`
 
@@ -184,7 +184,7 @@ fn is_game(e: Env, id: Address) -> bool
 
 #### Vault Integration (Query-Based)
 
-**ARCHITECTURE CHANGE**: Deposit/withdraw methods have been removed. Users interact directly with fee-vault-v2.
+**ARCHITECTURE CHANGE**: Deposit/withdraw methods have been removed. Players interact directly with fee-vault-v2.
 
 Blendizzard queries balances from vault when needed:
 - At first game of each epoch: queries `get_underlying_tokens()` to calculate FP
@@ -196,15 +196,15 @@ No explicit deposit/withdraw APIs exposed by Blendizzard contract.
 #### Faction Selection
 
 ```rust
-/// Allow the user to select a faction
-/// This should go to a persistent user entry so it persists across epochs
-/// Do not allow a user to select a faction after the epoch has started unless
+/// Allow the player to select a faction
+/// This should go to a persistent player entry so it persists across epochs
+/// Do not allow a player to select a faction after the epoch has started unless
 /// it is their first action for the epoch (hasn't played any games yet)
-/// This means we both track a per user and a per epoch faction
+/// This means we both track a per player and a per epoch faction
 /// This might mean the easier thing to do will be to allow this method to be
-/// called at any time but once the first game for the user is played they lock
+/// called at any time but once the first game for the player is played they lock
 /// in their epoch faction at that time
-fn select_faction(e: Env, user: Address, faction: u32)
+fn select_faction(e: Env, player: Address, faction: u32)
 ```
 
 #### Player Queries
@@ -212,11 +212,11 @@ fn select_faction(e: Env, user: Address, faction: u32)
 ```rust
 /// Get player information
 /// Returns: selected faction, last epoch balance, deposit timestamp
-fn get_player(e: Env, user: Address) -> PlayerInfo
+fn get_player(e: Env, player: Address) -> PlayerInfo
 
 /// Get player's epoch-specific information
 /// Returns: epoch faction, initial balance, available fp, locked fp, total fp contributed
-fn get_epoch_player(e: Env, user: Address) -> EpochPlayerInfo
+fn get_epoch_player(e: Env, player: Address) -> EpochPlayerInfo
 ```
 
 #### Game Lifecycle
@@ -226,7 +226,7 @@ fn get_epoch_player(e: Env, user: Address) -> EpochPlayerInfo
 /// When a game starts there's actually quite a bit that needs to be recorded:
 /// - If it's the players first game for the epoch we need to lock in their total
 ///   available factions points for the epoch
-/// - Lock in the user's faction if it hasn't been elected yet via `select_faction`
+/// - Lock in the player's faction if it hasn't been elected yet via `select_faction`
 fn start_game(
     e: Env,
     game_id: Address,
@@ -292,8 +292,8 @@ fn cycle_epoch(e: Env) -> u32
 #### Reward Claims
 
 ```rust
-/// Claim the epoch winnings/yield for a user for a specific epoch
-fn claim_yield(e: Env, user: Address, epoch: u32) -> i128
+/// Claim the epoch winnings/yield for a player for a specific epoch
+fn claim_yield(e: Env, player: Address, epoch: u32) -> i128
 ```
 
 #### Admin Functions
@@ -328,17 +328,17 @@ fn upgrade(e: Env, new_wasm_hash: BytesN<32>)
 ### Storage Types
 
 ```rust
-/// Persistent user data (across all epochs)
+/// Persistent player data (across all epochs)
 #[contracttype]
-pub struct User {
+pub struct Player {
     pub selected_faction: u32,
     pub deposit_timestamp: u64,
     pub last_epoch_balance: i128,  // For cross-epoch withdrawal comparison
 }
 
-/// Per-epoch user data
+/// Per-epoch player data
 #[contracttype]
-pub struct EpochUser {
+pub struct EpochPlayer {
     pub epoch_faction: Option<u32>,
     pub initial_balance: i128,  // Balance at first game of epoch
     pub available_fp: i128,
@@ -419,12 +419,12 @@ const CONFIG: Symbol = symbol_short!("CONFIG");
 const CUR_EPOCH: Symbol = symbol_short!("CUR_EPOCH");
 
 // Composite keys (using tuples or nested structures)
-// User(user_address) -> User
-// EpochUser(epoch_number, user_address) -> EpochUser
+// Player(player_address) -> Player
+// EpochPlayer(epoch_number, player_address) -> EpochPlayer
 // Epoch(epoch_number) -> EpochInfo
 // Session(session_id) -> GameSession
 // Game(game_address) -> bool
-// Claimed(user_address, epoch_number) -> bool
+// Claimed(player_address, epoch_number) -> bool
 ```
 
 ## Error Definitions
@@ -438,7 +438,7 @@ pub enum Error {
     NotAdmin = 1,
     AlreadyInitialized = 2,
 
-    // User errors
+    // Player errors
     InsufficientBalance = 10,
     InsufficientFactionPoints = 11,
     InvalidAmount = 12,
@@ -491,7 +491,7 @@ pub enum Error {
 
 **Testing Focus:**
 - Unit tests for each function
-- Integration test: full user journey
+- Integration test: full player journey
 - Security: basic invariant checks
 
 ### Phase 2: Full Features (Weeks 4-6)
@@ -527,7 +527,7 @@ pub enum Error {
 
 **Testing Focus:**
 - Fuzzing for edge cases
-- Load testing (many users/games)
+- Load testing (many players/games)
 - Upgrade testing
 - Failure mode analysis
 
@@ -546,19 +546,19 @@ pub enum Error {
 
 1. **FP Conservation:**
    ```rust
-   total_fp_in_system = sum(all users: available_fp + locked_fp)
+   total_fp_in_system = sum(all players: available_fp + locked_fp)
    ```
 
 2. **Balance Queries:**
    ```rust
    // Balances are always queried from fee-vault-v2, no local tracking
-   user_balance = fee_vault.get_underlying_tokens(user_address)
+   player_balance = fee_vault.get_underlying_tokens(player_address)
    ```
 
 3. **Faction Immutability:**
    ```rust
-   if user.epoch_faction.is_some() {
-       assert!(user cannot change faction this epoch)
+   if player.epoch_faction.is_some() {
+       assert!(player cannot change faction this epoch)
    }
    ```
 
@@ -575,18 +575,18 @@ pub enum Error {
 ### Attack Vectors & Mitigations
 
 #### 1. Flash Deposit Attack
-**Threat:** User deposits large amount just before epoch end to gain fp
+**Threat:** Player deposits large amount just before epoch end to gain fp
 **Mitigation:** Time multiplier starts at 1.0x, takes 30 days to reach ~1.5x
 
 #### 2. Epoch Boundary Manipulation
-**Threat:** User times deposits/withdrawals around epoch boundaries
+**Threat:** Player times deposits/withdrawals around epoch boundaries
 **Mitigation:**
 - Snapshot fp at first game start in epoch (balance remains valid for entire epoch)
 - Cross-epoch reset penalty: >50% net withdrawal between epochs resets time multiplier
-- FP remains valid even if user withdraws during epoch (epoch-based model)
+- FP remains valid even if player withdraws during epoch (epoch-based model)
 
 #### 3. Faction Switching Exploits
-**Threat:** User switches faction mid-epoch to be on winning side
+**Threat:** Player switches faction mid-epoch to be on winning side
 **Mitigation:** Faction locks on first game start, cannot change
 
 #### 4. Reward Calculation Errors
@@ -610,7 +610,7 @@ pub enum Error {
 - [ ] All storage writes have corresponding reads validation
 - [ ] No unbounded loops or recursion
 - [ ] All external calls have reentrancy protection
-- [ ] All user inputs are validated
+- [ ] All player inputs are validated
 - [ ] All admin functions have access control
 - [ ] Time-dependent logic handles edge cases
 - [ ] Storage keys cannot collide
@@ -683,7 +683,7 @@ soroban-sdk = { version = "22.0.8", features = ["testutils"] }
 
 ### Security
 - Use checked arithmetic everywhere
-- Validate all user inputs
+- Validate all player inputs
 - Emit events for all state changes
 - Implement reentrancy guards for external calls
 

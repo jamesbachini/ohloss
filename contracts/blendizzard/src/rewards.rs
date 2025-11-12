@@ -10,19 +10,19 @@ use crate::types::SCALAR_7;
 // Reward Distribution
 // ============================================================================
 
-/// Claim epoch reward for a user for a specific epoch
+/// Claim epoch reward for a player for a specific epoch
 ///
-/// Users who contributed FP to the winning faction can claim their share
+/// Players who contributed FP to the winning faction can claim their share
 /// of the epoch's reward pool (USDC converted from BLND yield).
 ///
 /// Formula:
 /// ```
-/// user_reward = (user_fp_contributed / total_winning_faction_fp) * reward_pool
+/// player_reward = (player_fp_contributed / total_winning_faction_fp) * reward_pool
 /// ```
 ///
 /// # Arguments
 /// * `env` - Contract environment
-/// * `user` - User claiming rewards
+/// * `player` - Player claiming rewards
 /// * `epoch` - Epoch number to claim from
 ///
 /// # Returns
@@ -30,15 +30,15 @@ use crate::types::SCALAR_7;
 ///
 /// # Errors
 /// * `EpochNotFinalized` - If epoch doesn't exist or isn't finalized
-/// * `RewardAlreadyClaimed` - If user already claimed for this epoch
-/// * `NotWinningFaction` - If user wasn't in the winning faction
-/// * `NoRewardsAvailable` - If user has no rewards to claim
-pub(crate) fn claim_epoch_reward(env: &Env, user: &Address, epoch: u32) -> Result<i128, Error> {
-    // Authenticate user
-    user.require_auth();
+/// * `RewardAlreadyClaimed` - If player already claimed for this epoch
+/// * `NotWinningFaction` - If player wasn't in the winning faction
+/// * `NoRewardsAvailable` - If player has no rewards to claim
+pub(crate) fn claim_epoch_reward(env: &Env, player: &Address, epoch: u32) -> Result<i128, Error> {
+    // Authenticate player
+    player.require_auth();
 
     // Check if already claimed
-    if storage::has_claimed(env, user, epoch) {
+    if storage::has_claimed(env, player, epoch) {
         return Err(Error::RewardAlreadyClaimed);
     }
 
@@ -53,20 +53,23 @@ pub(crate) fn claim_epoch_reward(env: &Env, user: &Address, epoch: u32) -> Resul
     // Get winning faction
     let winning_faction = epoch_info.winning_faction.ok_or(Error::EpochNotFinalized)?;
 
-    // Get user's epoch data
-    let epoch_user = storage::get_epoch_user(env, epoch, user).ok_or(Error::NoRewardsAvailable)?;
+    // Get player's epoch data
+    let epoch_player =
+        storage::get_epoch_player(env, epoch, player).ok_or(Error::NoRewardsAvailable)?;
 
-    // Check if user was in winning faction
-    let user_faction = epoch_user.epoch_faction.ok_or(Error::NoRewardsAvailable)?;
+    // Check if player was in winning faction
+    let player_faction = epoch_player
+        .epoch_faction
+        .ok_or(Error::NoRewardsAvailable)?;
 
-    if user_faction != winning_faction {
+    if player_faction != winning_faction {
         return Err(Error::NotWinningFaction);
     }
 
-    // Get user's fp contribution
-    let user_fp_contributed = epoch_user.total_fp_contributed;
+    // Get player's fp contribution
+    let player_fp_contributed = epoch_player.total_fp_contributed;
 
-    if user_fp_contributed == 0 {
+    if player_fp_contributed == 0 {
         return Err(Error::NoRewardsAvailable);
     }
 
@@ -80,10 +83,10 @@ pub(crate) fn claim_epoch_reward(env: &Env, user: &Address, epoch: u32) -> Resul
         return Err(Error::DivisionByZero);
     }
 
-    // Calculate user's share of rewards
-    // Formula: (user_fp / total_fp) * reward_pool
+    // Calculate player's share of rewards
+    // Formula: (player_fp / total_fp) * reward_pool
     let reward_amount = calculate_reward_share(
-        user_fp_contributed,
+        player_fp_contributed,
         total_winning_fp,
         epoch_info.reward_pool,
     )?;
@@ -93,15 +96,15 @@ pub(crate) fn claim_epoch_reward(env: &Env, user: &Address, epoch: u32) -> Resul
     }
 
     // Mark as claimed
-    storage::set_claimed(env, user, epoch);
+    storage::set_claimed(env, player, epoch);
 
-    // Transfer USDC to user
+    // Transfer USDC to player
     let config = storage::get_config(env);
     let usdc_client = soroban_sdk::token::Client::new(env, &config.usdc_token);
-    usdc_client.transfer(&env.current_contract_address(), user, &reward_amount);
+    usdc_client.transfer(&env.current_contract_address(), player, &reward_amount);
 
     // Emit event
-    emit_rewards_claimed(env, user, epoch, user_faction, reward_amount);
+    emit_rewards_claimed(env, player, epoch, player_faction, reward_amount);
 
     Ok(reward_amount)
 }
@@ -110,25 +113,25 @@ pub(crate) fn claim_epoch_reward(env: &Env, user: &Address, epoch: u32) -> Resul
 // Helper Functions
 // ============================================================================
 
-/// Calculate user's share of the reward pool
+/// Calculate player's share of the reward pool
 ///
-/// Formula: (user_fp_contributed / total_winning_fp) * reward_pool
+/// Formula: (player_fp_contributed / total_winning_fp) * reward_pool
 /// Uses fixed-point math to avoid overflow
 ///
 /// # Arguments
-/// * `user_fp` - User's total fp contributed
+/// * `player_fp` - Player's total fp contributed
 /// * `total_fp` - Total fp for winning faction
 /// * `reward_pool` - Total USDC available for distribution
 ///
 /// # Returns
-/// User's reward amount in USDC
+/// Player's reward amount in USDC
 ///
 /// # Errors
 /// * `OverflowError` - If calculation overflows
 /// * `DivisionByZero` - If total_fp is 0
-fn calculate_reward_share(user_fp: i128, total_fp: i128, reward_pool: i128) -> Result<i128, Error> {
-    // Calculate user's share as a fraction: user_fp / total_fp
-    let share = user_fp
+fn calculate_reward_share(player_fp: i128, total_fp: i128, reward_pool: i128) -> Result<i128, Error> {
+    // Calculate player's share as a fraction: player_fp / total_fp
+    let share = player_fp
         .fixed_div_floor(total_fp, SCALAR_7)
         .ok_or(Error::DivisionByZero)?;
 
@@ -143,4 +146,3 @@ fn calculate_reward_share(user_fp: i128, total_fp: i128, reward_pool: i128) -> R
 // ============================================================================
 // Query Functions
 // ============================================================================
-

@@ -1,8 +1,8 @@
-# User Query Error Handling - November 7, 2025
+# Player Query Error Handling - November 7, 2025
 
 ## Summary
 
-✅ **FIXED** - User query functions now return proper errors instead of misleading defaults
+✅ **FIXED** - Player query functions now return proper errors instead of misleading defaults
 
 **Changes**: 2 files modified
 **Tests**: 72/72 passing ✅ (no test changes needed)
@@ -11,29 +11,29 @@
 
 ## Problem Identified
 
-The `get_player()` and `get_epoch_player()` functions returned default values when a user didn't exist, making it appear as if the user existed with default data (faction 0, zero deposits).
+The `get_player()` and `get_epoch_player()` functions returned default values when a player didn't exist, making it appear as if the player existed with default data (faction 0, zero deposits).
 
 ### Issue Details
 
 **Before Fix:**
 ```rust
 // lib.rs
-pub fn get_player(env: Env, user: Address) -> PlayerInfo {
-    let user_data = storage::get_user(&env, &user).unwrap_or(types::User {
+pub fn get_player(env: Env, player: Address) -> PlayerInfo {
+    let player_data = storage::get_player(&env, &player).unwrap_or(types::Player {
         selected_faction: 0,    // ← Misleading default!
-        total_deposited: 0,     // ← Looks like user exists
+        total_deposited: 0,     // ← Looks like player exists
         deposit_timestamp: 0,
     });
 
     PlayerInfo {
-        selected_faction: user_data.selected_faction,
-        total_deposited: user_data.total_deposited,
+        selected_faction: player_data.selected_faction,
+        total_deposited: player_data.total_deposited,
     }
 }
 
-pub fn get_epoch_player(env: Env, user: Address) -> EpochPlayerInfo {
+pub fn get_epoch_player(env: Env, player: Address) -> EpochPlayerInfo {
     let current_epoch = storage::get_current_epoch(&env);
-    let epoch_user = storage::get_epoch_user(&env, current_epoch, &user).unwrap_or(types::EpochUser {
+    let epoch_player = storage::get_epoch_player(&env, current_epoch, &player).unwrap_or(types::EpochPlayer {
         epoch_faction: None,
         available_fp: 0,        // ← Misleading defaults!
         locked_fp: 0,
@@ -43,47 +43,47 @@ pub fn get_epoch_player(env: Env, user: Address) -> EpochPlayerInfo {
     });
 
     EpochPlayerInfo {
-        epoch_faction: epoch_user.epoch_faction,
-        total_fp: epoch_user.available_fp + epoch_user.locked_fp,
-        available_fp: epoch_user.available_fp,
-        withdrawn_this_epoch: epoch_user.withdrawn_this_epoch,
+        epoch_faction: epoch_player.epoch_faction,
+        total_fp: epoch_player.available_fp + epoch_player.locked_fp,
+        available_fp: epoch_player.available_fp,
+        withdrawn_this_epoch: epoch_player.withdrawn_this_epoch,
     }
 }
 ```
 
 **Problems:**
-- ❌ Non-existent users appear to exist with faction 0 (WholeNoodle) and zero deposits
+- ❌ Non-existent players appear to exist with faction 0 (WholeNoodle) and zero deposits
 - ❌ No way for clients to distinguish between:
-  - User doesn't exist at all
-  - User exists with faction 0 and no deposits
+  - Player doesn't exist at all
+  - Player exists with faction 0 and no deposits
 - ❌ Misleading API - looks like everyone exists
 - ❌ Poor error handling - silently returns defaults
 
 **Real-World Scenario:**
 ```
-Frontend queries user: "GBXYZ..."
+Frontend queries player: "GBXYZ..."
 Contract returns: { selected_faction: 0, total_deposited: 0 }
-Frontend: "User is in WholeNoodle faction with 0 USDC deposited"
+Frontend: "Player is in WholeNoodle faction with 0 USDC deposited"
 
-Actual state: User has NEVER interacted with the contract!
+Actual state: Player has NEVER interacted with the contract!
 
 Problem: Frontend can't distinguish between:
-- New user who selected WholeNoodle and deposited 0 (invalid state)
-- User who doesn't exist at all
+- New player who selected WholeNoodle and deposited 0 (invalid state)
+- Player who doesn't exist at all
 ```
 
 ## Changes Made
 
-### 1. errors.rs - Added UserNotFound error
+### 1. errors.rs - Added PlayerNotFound error
 
 ```diff
  // ========================================================================
- // User errors (10-19)
+ // Player errors (10-19)
  // ========================================================================
- /// User has insufficient balance for the requested operation
+ /// Player has insufficient balance for the requested operation
  InsufficientBalance = 10,
 
- /// User has insufficient faction points for the requested wager
+ /// Player has insufficient faction points for the requested wager
  InsufficientFactionPoints = 11,
 
  /// Amount is invalid (e.g., zero or negative)
@@ -92,11 +92,11 @@ Problem: Frontend can't distinguish between:
  /// Faction ID is invalid (must be 0, 1, or 2)
  InvalidFaction = 13,
 
- /// User's faction is already locked for this epoch (cannot change)
+ /// Player's faction is already locked for this epoch (cannot change)
  FactionAlreadyLocked = 14,
 
-+/// User does not exist (no deposits or interactions yet)
-+UserNotFound = 15,
++/// Player does not exist (no deposits or interactions yet)
++PlayerNotFound = 15,
 ```
 
 **Line Added**: 38-39
@@ -107,8 +107,8 @@ Problem: Frontend can't distinguish between:
  /// Get player information
  ///
  /// Returns persistent player data including selected faction and total deposited.
--pub fn get_player(env: Env, user: Address) -> PlayerInfo {
--    let user_data = storage::get_user(&env, &user).unwrap_or(types::User {
+-pub fn get_player(env: Env, player: Address) -> PlayerInfo {
+-    let player_data = storage::get_player(&env, &player).unwrap_or(types::Player {
 -        selected_faction: 0,
 -        total_deposited: 0,
 -        deposit_timestamp: 0,
@@ -117,13 +117,13 @@ Problem: Frontend can't distinguish between:
 -    PlayerInfo {
 +///
 +/// # Errors
-+/// * `UserNotFound` - If user has never interacted with the contract
-+pub fn get_player(env: Env, user: Address) -> Result<PlayerInfo, Error> {
-+    let user_data = storage::get_user(&env, &user).ok_or(Error::UserNotFound)?;
++/// * `PlayerNotFound` - If player has never interacted with the contract
++pub fn get_player(env: Env, player: Address) -> Result<PlayerInfo, Error> {
++    let player_data = storage::get_player(&env, &player).ok_or(Error::PlayerNotFound)?;
 +
 +    Ok(PlayerInfo {
-         selected_faction: user_data.selected_faction,
-         total_deposited: user_data.total_deposited,
+         selected_faction: player_data.selected_faction,
+         total_deposited: player_data.total_deposited,
 -    }
 +    })
  }
@@ -132,7 +132,7 @@ Problem: Frontend can't distinguish between:
 **Lines Changed**:
 - Lines 315-317: Added error documentation
 - Line 318: Changed return type to `Result<PlayerInfo, Error>`
-- Line 319: Return `UserNotFound` error instead of defaults
+- Line 319: Return `PlayerNotFound` error instead of defaults
 - Line 321-324: Wrapped return in `Ok(...)`
 
 ### 3. lib.rs - Updated get_epoch_player to return Result
@@ -141,18 +141,18 @@ Problem: Frontend can't distinguish between:
  /// Get player's epoch-specific information
  ///
  /// Returns epoch-specific data including locked faction, fp amounts, and withdrawals.
--pub fn get_epoch_player(env: Env, user: Address) -> EpochPlayerInfo {
-+/// If the user exists but hasn't played this epoch yet, returns zero values with no locked faction.
+-pub fn get_epoch_player(env: Env, player: Address) -> EpochPlayerInfo {
++/// If the player exists but hasn't played this epoch yet, returns zero values with no locked faction.
 +///
 +/// # Errors
-+/// * `UserNotFound` - If user has never interacted with the contract
-+pub fn get_epoch_player(env: Env, user: Address) -> Result<EpochPlayerInfo, Error> {
-+    // Verify user exists first
-+    storage::get_user(&env, &user).ok_or(Error::UserNotFound)?;
++/// * `PlayerNotFound` - If player has never interacted with the contract
++pub fn get_epoch_player(env: Env, player: Address) -> Result<EpochPlayerInfo, Error> {
++    // Verify player exists first
++    storage::get_player(&env, &player).ok_or(Error::PlayerNotFound)?;
 +
      let current_epoch = storage::get_current_epoch(&env);
-     let epoch_user =
-         storage::get_epoch_user(&env, current_epoch, &user).unwrap_or(types::EpochUser {
+     let epoch_player =
+         storage::get_epoch_player(&env, current_epoch, &player).unwrap_or(types::EpochPlayer {
              epoch_faction: None,
              available_fp: 0,
              locked_fp: 0,
@@ -163,10 +163,10 @@ Problem: Frontend can't distinguish between:
 
 -    EpochPlayerInfo {
 +    Ok(EpochPlayerInfo {
-         epoch_faction: epoch_user.epoch_faction,
-         total_fp: epoch_user.available_fp + epoch_user.locked_fp,
-         available_fp: epoch_user.available_fp,
-         withdrawn_this_epoch: epoch_user.withdrawn_this_epoch,
+         epoch_faction: epoch_player.epoch_faction,
+         total_fp: epoch_player.available_fp + epoch_player.locked_fp,
+         available_fp: epoch_player.available_fp,
+         withdrawn_this_epoch: epoch_player.withdrawn_this_epoch,
 -    }
 +    })
  }
@@ -176,26 +176,26 @@ Problem: Frontend can't distinguish between:
 - Line 330: Added documentation about epoch data defaults
 - Lines 332-333: Added error documentation
 - Line 334: Changed return type to `Result<EpochPlayerInfo, Error>`
-- Lines 335-336: Check if user exists, return error if not
-- Lines 340-347: Still use defaults for epoch data (valid state - user exists but hasn't played)
+- Lines 335-336: Check if player exists, return error if not
+- Lines 340-347: Still use defaults for epoch data (valid state - player exists but hasn't played)
 - Lines 349-354: Wrapped return in `Ok(...)`
 
 **Key Design Decision**: `get_epoch_player` has two levels:
-1. **User level**: Must exist → Error if not
-2. **Epoch level**: May not exist → Defaults okay (user exists but hasn't played this epoch)
+1. **Player level**: Must exist → Error if not
+2. **Epoch level**: May not exist → Defaults okay (player exists but hasn't played this epoch)
 
 This makes sense because:
-- Not existing = error condition (user never interacted)
-- No epoch data = valid state (user exists but inactive this epoch)
+- Not existing = error condition (player never interacted)
+- No epoch data = valid state (player exists but inactive this epoch)
 
 ## Verification
 
 ### Code Analysis
 
 ✅ **Proper error handling**:
-- `UserNotFound` error clearly indicates user doesn't exist
-- Epoch data defaults still valid (user exists but hasn't played)
-- No misleading defaults for non-existent users
+- `PlayerNotFound` error clearly indicates player doesn't exist
+- Epoch data defaults still valid (player exists but hasn't played)
+- No misleading defaults for non-existent players
 - Clear API semantics
 
 ### Test Results
@@ -219,11 +219,11 @@ test result: ok. 72 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out
 
 ```rust
 // Contract function (what we wrote)
-pub fn get_player(env: Env, user: Address) -> Result<PlayerInfo, Error>
+pub fn get_player(env: Env, player: Address) -> Result<PlayerInfo, Error>
 
 // Generated SDK client (automatic)
 impl Client {
-    pub fn get_player(&self, user: &Address) -> PlayerInfo {
+    pub fn get_player(&self, player: &Address) -> PlayerInfo {
         // Calls contract, automatically unwraps Result
         // Panics on error (which fails the test - desired behavior)
     }
@@ -232,9 +232,9 @@ impl Client {
 
 So in tests:
 ```rust
-let player_info = client.get_player(&user);
+let player_info = client.get_player(&player);
 // Works exactly as before!
-// Panics if user doesn't exist → test fails → correct!
+// Panics if player doesn't exist → test fails → correct!
 ```
 
 This is perfect because:
@@ -260,18 +260,18 @@ stellar contract build
 // What does this mean?
 PlayerInfo { selected_faction: 0, total_deposited: 0 }
 
-Is the user:
+Is the player:
 - In WholeNoodle faction with no deposits?
 - Non-existent? (default values)
 ```
 
 **After**: Crystal clear
 ```rust
-// Success - user exists
+// Success - player exists
 Ok(PlayerInfo { selected_faction: 0, total_deposited: 0 })
 
-// Error - user doesn't exist
-Err(Error::UserNotFound)
+// Error - player doesn't exist
+Err(Error::PlayerNotFound)
 
 No ambiguity!
 ```
@@ -281,10 +281,10 @@ No ambiguity!
 **Before**:
 ```typescript
 // Frontend code
-const player = await contract.get_player({ user: address });
-// Always succeeds, even if user doesn't exist
+const player = await contract.get_player({ player: address });
+// Always succeeds, even if player doesn't exist
 if (player.total_deposited === 0) {
-  // Is this a new user or non-existent user? 🤷
+  // Is this a new player or non-existent player? 🤷
 }
 ```
 
@@ -292,11 +292,11 @@ if (player.total_deposited === 0) {
 ```typescript
 // Frontend code
 try {
-  const player = await contract.get_player({ user: address });
-  // User exists! Show their data
+  const player = await contract.get_player({ player: address });
+  // Player exists! Show their data
 } catch (e) {
-  if (e.type === 'UserNotFound') {
-    // User doesn't exist - show onboarding
+  if (e.type === 'PlayerNotFound') {
+    // Player doesn't exist - show onboarding
   }
 }
 ```
@@ -306,12 +306,12 @@ try {
 **Example Bug (Before)**:
 ```typescript
 // Frontend tries to claim rewards
-const player = await contract.get_player({ user: address });
-// Always succeeds even for non-existent user
+const player = await contract.get_player({ player: address });
+// Always succeeds even for non-existent player
 
 if (player.total_deposited > 0) {
   // Try to claim - will fail deeper in the contract
-  await contract.claim_yield({ user: address });
+  await contract.claim_yield({ player: address });
 }
 
 Problem: Poor UX - error happens late, unclear message
@@ -320,15 +320,15 @@ Problem: Poor UX - error happens late, unclear message
 **Fixed (After)**:
 ```typescript
 try {
-  const player = await contract.get_player({ user: address });
-  // Only reaches here if user exists
+  const player = await contract.get_player({ player: address });
+  // Only reaches here if player exists
 
   if (player.total_deposited > 0) {
-    await contract.claim_yield({ user: address });
+    await contract.claim_yield({ player: address });
   }
 } catch (e) {
-  if (e.type === 'UserNotFound') {
-    // Clear, early error: "User doesn't exist, please deposit first"
+  if (e.type === 'PlayerNotFound') {
+    // Clear, early error: "Player doesn't exist, please deposit first"
   }
 }
 
@@ -338,8 +338,8 @@ Solution: Early, clear error handling
 ### 4. **Consistent Error Handling** 🎯
 
 All query functions now follow same pattern:
-- `get_player()` → `Result<PlayerInfo, Error>` (UserNotFound if missing)
-- `get_epoch_player()` → `Result<EpochPlayerInfo, Error>` (UserNotFound if missing)
+- `get_player()` → `Result<PlayerInfo, Error>` (PlayerNotFound if missing)
+- `get_epoch_player()` → `Result<EpochPlayerInfo, Error>` (PlayerNotFound if missing)
 - Other functions already returned Results
 
 Consistent API design → easier to use correctly
@@ -350,56 +350,56 @@ Consistent API design → easier to use correctly
 
 **Before** (Ambiguous):
 ```typescript
-// Can't tell if user exists
-const player = await contract.get_player({ user: address });
+// Can't tell if player exists
+const player = await contract.get_player({ player: address });
 console.log(player.total_deposited); // 0 - but why?
 ```
 
 **After** (Clear):
 ```typescript
 try {
-  const player = await contract.get_player({ user: address });
-  console.log(`User exists: ${player.total_deposited} USDC`);
+  const player = await contract.get_player({ player: address });
+  console.log(`Player exists: ${player.total_deposited} USDC`);
 } catch (error) {
-  if (error.type === 'UserNotFound') {
-    console.log('User has not interacted with the contract yet');
+  if (error.type === 'PlayerNotFound') {
+    console.log('Player has not interacted with the contract yet');
     // Show onboarding flow
   }
 }
 ```
 
-### Checking User Existence
+### Checking Player Existence
 
 **Before** (Hacky):
 ```typescript
-// Hacky way to check if user exists
-const player = await contract.get_player({ user: address });
+// Hacky way to check if player exists
+const player = await contract.get_player({ player: address });
 const exists = player.total_deposited > 0 || player.selected_faction !== 0;
-// Not reliable! What if user selected faction 0 and never deposited?
+// Not reliable! What if player selected faction 0 and never deposited?
 ```
 
 **After** (Proper):
 ```typescript
-// Proper way to check if user exists
+// Proper way to check if player exists
 try {
-  await contract.get_player({ user: address });
-  return true; // User exists
+  await contract.get_player({ player: address });
+  return true; // Player exists
 } catch (error) {
-  if (error.type === 'UserNotFound') {
-    return false; // User doesn't exist
+  if (error.type === 'PlayerNotFound') {
+    return false; // Player doesn't exist
   }
   throw error; // Other error
 }
 ```
 
-### Displaying User Status
+### Displaying Player Status
 
 **Before** (Confusing):
 ```typescript
-const player = await contract.get_player({ user: address });
+const player = await contract.get_player({ player: address });
 
 if (player.total_deposited === 0) {
-  // Show "No deposits" - but user might not exist!
+  // Show "No deposits" - but player might not exist!
   return "No deposits yet";
 }
 ```
@@ -407,16 +407,16 @@ if (player.total_deposited === 0) {
 **After** (Clear):
 ```typescript
 try {
-  const player = await contract.get_player({ user: address });
+  const player = await contract.get_player({ player: address });
 
   if (player.total_deposited === 0) {
-    return "User has no deposits"; // Clear: user exists, no deposits
+    return "Player has no deposits"; // Clear: player exists, no deposits
   }
 
   return `Deposited: ${player.total_deposited} USDC`;
 } catch (error) {
-  if (error.type === 'UserNotFound') {
-    return "User not found - please deposit to get started";
+  if (error.type === 'PlayerNotFound') {
+    return "Player not found - please deposit to get started";
   }
   throw error;
 }
@@ -427,13 +427,13 @@ try {
 ### No Security Issues
 
 ✅ **Proper error handling improves security**:
-- No information leakage (same error for all non-existent users)
+- No information leakage (same error for all non-existent players)
 - Clear separation between "exists" and "doesn't exist"
 - Prevents logic bugs from silent failures
 
 ### Error Message Safety
 
-**UserNotFound Error**:
+**PlayerNotFound Error**:
 - Safe to expose to clients
 - No sensitive information
 - Standard "not found" pattern
@@ -459,8 +459,8 @@ try {
 ### API Compatibility
 
 ❌ **Breaking change for non-SDK clients**:
-- Old signature: `get_player(user) -> PlayerInfo`
-- New signature: `get_player(user) -> Result<PlayerInfo, Error>`
+- Old signature: `get_player(player) -> PlayerInfo`
+- New signature: `get_player(player) -> Result<PlayerInfo, Error>`
 
 **Impact on clients**:
 - **SDK clients** (TypeScript, Rust, etc.): ✅ **No changes** (SDK handles it)
@@ -469,60 +469,60 @@ try {
 **Migration for custom clients**:
 ```rust
 // Old code (won't compile)
-let player = contract.get_player(&user);
+let player = contract.get_player(&player);
 
 // New code
-let player = contract.get_player(&user)?; // Or .unwrap()
+let player = contract.get_player(&player)?; // Or .unwrap()
 ```
 
 ### Performance Impact
 
 ✅ **Slight performance improvement**:
-- No longer constructs default User struct when missing
+- No longer constructs default Player struct when missing
 - Faster early return with error
 - No unnecessary allocations
 
 ## Testing Coverage
 
-All user query functionality tested:
+All player query functionality tested:
 
 | Test | Coverage | Status |
 |------|----------|--------|
-| All 72 existing tests | Users expected to exist → panic if not | ✅ |
+| All 72 existing tests | Players expected to exist → panic if not | ✅ |
 
 **Why no new tests needed?**
-- All existing tests create users before querying (deposit/select_faction)
-- If user unexpectedly doesn't exist → test panics → correct behavior!
+- All existing tests create players before querying (deposit/select_faction)
+- If player unexpectedly doesn't exist → test panics → correct behavior!
 - SDK client automatically handles Result → no test code changes
 
 **Future test enhancement** (optional):
-Could add explicit test for UserNotFound error:
+Could add explicit test for PlayerNotFound error:
 ```rust
 #[test]
-#[should_panic(expected = "UserNotFound")]
+#[should_panic(expected = "PlayerNotFound")]
 fn test_get_player_not_found() {
     let env = setup_test_env();
     let admin = Address::generate(&env);
-    let non_existent_user = Address::generate(&env);
+    let non_existent_player = Address::generate(&env);
 
     let client = create_test_blendizzard(&env, &admin);
 
-    // This should panic with UserNotFound
-    client.get_player(&non_existent_user);
+    // This should panic with PlayerNotFound
+    client.get_player(&non_existent_player);
 }
 ```
 
 ## Code Quality
 
 ### Before Fix
-- ⚠️ Misleading API (defaults for non-existent users)
-- ⚠️ No way to check user existence
+- ⚠️ Misleading API (defaults for non-existent players)
+- ⚠️ No way to check player existence
 - ⚠️ Poor error handling patterns
 - ⚠️ Ambiguous return values
 
 ### After Fix
 - ✅ Clear error handling
-- ✅ Explicit user existence checking
+- ✅ Explicit player existence checking
 - ✅ Consistent API design
 - ✅ Unambiguous semantics
 - ✅ Zero warnings
@@ -531,7 +531,7 @@ fn test_get_player_not_found() {
 ## Related Files
 
 **Modified:**
-- `src/errors.rs` - Added UserNotFound error
+- `src/errors.rs` - Added PlayerNotFound error
 - `src/lib.rs` - Updated get_player and get_epoch_player
 
 **Unchanged:**
@@ -541,16 +541,16 @@ fn test_get_player_not_found() {
 ## Documentation
 
 Updated comments to clarify:
-1. get_player - Documents UserNotFound error
-2. get_epoch_player - Documents UserNotFound error and epoch data defaults
-3. errors.rs - Added UserNotFound documentation
+1. get_player - Documents PlayerNotFound error
+2. get_epoch_player - Documents PlayerNotFound error and epoch data defaults
+3. errors.rs - Added PlayerNotFound documentation
 
 ## Conclusion
 
 **Status**: ✅ **FIXED AND VERIFIED**
 
-The user query functions now have proper error handling:
-- Return `UserNotFound` error for non-existent users
+The player query functions now have proper error handling:
+- Return `PlayerNotFound` error for non-existent players
 - No misleading default values
 - Clear API semantics
 - All tests passing (72/72)
@@ -561,18 +561,18 @@ The user query functions now have proper error handling:
 **Quality Score**: Excellent
 - API clarity: ✅ (clear error vs success)
 - Error handling: ✅ (proper Result types)
-- User experience: ✅ (clear error messages)
+- Player experience: ✅ (clear error messages)
 - Code quality: ✅ (no ambiguous states)
 - Testing: ✅ (all passing, SDK handles automatically)
 
 **Client Benefits**:
-- **Clear distinction** between "user doesn't exist" and "user has no deposits"
-- **Better UX** - can show appropriate onboarding for new users
+- **Clear distinction** between "player doesn't exist" and "player has no deposits"
+- **Better UX** - can show appropriate onboarding for new players
 - **Fewer bugs** - no logic errors from misleading defaults
 - **Consistent API** - all query functions return Results
 
 **SDK Magic**:
-The Soroban SDK automatically handles Result types in generated clients, so existing SDK-based code (tests, frontends) works without changes. The SDK unwraps the Result and panics on error, which is the correct behavior for tests and gives clear error messages to end users.
+The Soroban SDK automatically handles Result types in generated clients, so existing SDK-based code (tests, frontends) works without changes. The SDK unwraps the Result and panics on error, which is the correct behavior for tests and gives clear error messages to end players.
 
 **Ready for**: Production deployment
 

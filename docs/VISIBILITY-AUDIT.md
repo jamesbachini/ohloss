@@ -10,7 +10,7 @@ Audited and corrected all `pub` vs `pub(crate)` visibility modifiers throughout 
 
 1. **Contract API** (`lib.rs` within `#[contractimpl]`) → `pub`
    - These functions are exported from the contract
-   - Callable by external users and contracts
+   - Callable by external players and contracts
    - **27 functions** correctly marked as `pub`
 
 2. **Internal Helpers** (all other modules) → `pub(crate)`

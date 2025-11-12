@@ -23,39 +23,59 @@ impl Faction {
 // Storage Data Structures
 // ============================================================================
 
-/// Persistent user data (across all epochs)
+/// Persistent player data (across all epochs)
 ///
-/// Stores the user's faction preference and time multiplier tracking.
+/// Stores the player's faction preference and time multiplier tracking.
 /// This persists across epoch boundaries.
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct User {
-    /// The user's persistent faction selection (can be changed between epochs)
+pub struct Player {
+    /// The player's persistent faction selection (can be changed between epochs)
     pub selected_faction: u32,
 
     /// Timestamp when the time multiplier calculation started
-    /// Set when user plays their first game (with vault balance > 0)
-    /// Reset to current time if user withdraws >50% between epochs
+    /// Set when player plays their first game (with vault balance > 0)
+    /// Reset to current time if player withdraws >50% between epochs
     pub time_multiplier_start: u64,
 
-    /// User's vault balance from the previous epoch (for cross-epoch comparison)
+    /// Player's vault balance from the previous epoch (for cross-epoch comparison)
     /// Used to detect >50% withdrawal between epochs
     pub last_epoch_balance: i128,
 }
 
-/// Per-epoch user data
+/// OLDEST Player struct for migration purposes (pre-Nov 10)
+/// Used to read data stored with old field "total_deposited"
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct PlayerV0 {
+    pub selected_faction: u32,
+    pub total_deposited: i128,
+    pub deposit_timestamp: u64,
+}
+
+/// OLD Player struct for migration purposes (Nov 10 - Nov 12)
+/// Used to read data stored with old field name "deposit_timestamp"
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct PlayerV1 {
+    pub selected_faction: u32,
+    pub deposit_timestamp: u64,
+    pub last_epoch_balance: i128,
+}
+
+/// Per-epoch player data
 ///
-/// Created when a user first interacts with the contract in a new epoch.
+/// Created when a player first interacts with the contract in a new epoch.
 /// Tracks faction points and epoch-specific faction lock.
 /// FP is calculated once at first game of epoch based on vault balance.
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct EpochUser {
+pub struct EpochPlayer {
     /// The faction locked in for this epoch (locked on first game)
     /// None = not yet locked, Some(faction_id) = locked
     pub epoch_faction: Option<u32>,
 
-    /// User's vault balance snapshot at first game of this epoch
+    /// Player's vault balance snapshot at first game of this epoch
     /// Captures the vault balance used to calculate this epoch's FP
     pub epoch_balance_snapshot: i128,
 
@@ -66,7 +86,7 @@ pub struct EpochUser {
     /// Faction points currently locked in active games
     pub locked_fp: i128,
 
-    /// Total faction points contributed to the user's faction this epoch
+    /// Total faction points contributed to the player's faction this epoch
     /// Used for reward distribution calculation
     pub total_fp_contributed: i128,
 }

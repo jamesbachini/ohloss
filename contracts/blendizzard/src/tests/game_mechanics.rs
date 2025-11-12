@@ -211,8 +211,7 @@ fn test_faction_locks_on_first_game() {
     // Faction should not be locked yet (check via get_epoch_player)
     let epoch_player_before = blendizzard.get_epoch_player(&player);
     assert_eq!(
-        epoch_player_before.epoch_faction,
-        None,
+        epoch_player_before.epoch_faction, None,
         "Faction should not be locked before first game"
     );
 
@@ -239,7 +238,7 @@ fn test_faction_locks_on_first_game() {
         "Faction should be locked to WholeNoodle after first game"
     );
 
-    // Try to change faction (should update User.selected_faction but not affect current epoch)
+    // Try to change faction (should update Player.selected_faction but not affect current epoch)
     blendizzard.select_faction(&player, &1); // Try to switch to PointyStick
 
     // Epoch faction should remain locked

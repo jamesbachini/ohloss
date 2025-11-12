@@ -13,8 +13,8 @@
 
 The pause state was stored **inside the Config struct**, causing performance issues:
 
-1. **Inefficient access**: Every user function reads entire Config just to check pause state
-2. **Frequent operation**: `require_not_paused()` called on EVERY user action
+1. **Inefficient access**: Every player function reads entire Config just to check pause state
+2. **Frequent operation**: `require_not_paused()` called on EVERY player action
 3. **Unnecessary I/O**: Reading 5 unused fields to check 1 boolean
 
 ### Issue Details
@@ -28,7 +28,7 @@ pub struct Config {
     pub blnd_token: Address,
     pub usdc_token: Address,
     pub epoch_duration: u64,
-    pub is_paused: bool,        // ← Accessed on EVERY user call
+    pub is_paused: bool,        // ← Accessed on EVERY player call
 }
 
 // storage.rs - Checking pause state
@@ -45,12 +45,12 @@ pub(crate) fn set_pause_state(env: &Env, paused: bool) {
 
 **Problems:**
 - ❌ Reads 5 unnecessary fields (fee_vault, soroswap_router, blnd_token, usdc_token, epoch_duration)
-- ❌ Called on EVERY user operation (deposit, withdraw, start_game, claim_yield)
+- ❌ Called on EVERY player operation (deposit, withdraw, start_game, claim_yield)
 - ❌ Major performance bottleneck
 - ❌ Inefficient storage I/O pattern
 
 **Usage Frequency:**
-Every user function checks pause state:
+Every player function checks pause state:
 - `deposit()` → calls `require_not_paused()`
 - `withdraw()` → calls `require_not_paused()`
 - `start_game()` → calls `require_not_paused()`
@@ -246,7 +246,7 @@ DataKey::Config          → Config {
 
 ### Access Patterns
 
-**High-Frequency Reads** (every user operation):
+**High-Frequency Reads** (every player operation):
 ```rust
 storage::is_paused(&env)  // Single bool read - OPTIMIZED ✅
 ```
@@ -338,11 +338,11 @@ Both fixes follow the same principle: **Separate frequently-accessed singletons 
 | Field | Access Frequency | Fix Priority | Impact |
 |-------|------------------|--------------|--------|
 | `admin` | Low (admin ops only) | Medium | Storage savings, consistency |
-| `is_paused` | **HIGH (every user op)** | **HIGH** | **Major performance gain** |
+| `is_paused` | **HIGH (every player op)** | **HIGH** | **Major performance gain** |
 
 The pause state fix is arguably **more important** than the admin fix because:
 - Admin is checked only on admin operations (~1% of calls)
-- Pause is checked on every user operation (~99% of calls)
+- Pause is checked on every player operation (~99% of calls)
 
 ## Related Files
 
@@ -386,7 +386,7 @@ The pause state storage issue has been completely resolved:
 - Affects the most frequently accessed storage check
 - Reduces read size by ~160x
 - Reduces deserialization overhead by ~6x
-- Improves gas efficiency for every user operation
+- Improves gas efficiency for every player operation
 
 **Ready for**: Production deployment
 

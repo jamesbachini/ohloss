@@ -320,13 +320,13 @@ const KEY: &str = "my_config_key";
 ### References to Avoid Cloning
 ```rust
 // ✅ Good - pass reference
-fn helper(env: &Env, user: &Address) {
+fn helper(env: &Env, player: &Address) {
     // use without cloning
 }
 
 // ❌ Bad - unnecessary clone
-fn helper(env: Env, user: Address) {
-    // env and user are cloned
+fn helper(env: Env, player: Address) {
+    // env and player are cloned
 }
 ```
 
@@ -349,13 +349,13 @@ let result = (amount * multiplier) / SCALAR_7;
 ```rust
 // ✅ Good - type-safe, collision-free
 pub enum DataKey {
-    User(Address),
-    EpochUser(u32, Address),
+    Player(Address),
+    EpochPlayer(u32, Address),
     Epoch(u32),
     Session(BytesN<32>),
 }
 
-let key = DataKey::User(user_addr);
+let key = DataKey::Player(user_addr);
 env.storage().persistent().get(&key);
 ```
 
@@ -380,7 +380,7 @@ if amount <= 0 {
 ```rust
 // Emit events for off-chain indexing
 env.events().publish(
-    (symbol_short!("deposit"), user),
+    (symbol_short!("deposit"), player),
     (amount, new_balance)
 );
 ```
@@ -392,12 +392,12 @@ use soroban_sdk::contractclient;
 
 #[contractclient(name = "FeeVaultClient")]
 pub trait FeeVaultTrait {
-    fn deposit(env: Env, user: Address, amount: i128) -> i128;
+    fn deposit(env: Env, player: Address, amount: i128) -> i128;
 }
 
 // Use it
 let vault_client = FeeVaultClient::new(&env, &vault_address);
-vault_client.deposit(&user, &amount);
+vault_client.deposit(&player, &amount);
 ```
 
 ## TypeScript Testing with Bun
@@ -495,7 +495,7 @@ const contract = new Contract({
 
 // Call contract methods (type-safe!)
 const result = await contract.deposit({
-  user: keypair.publicKey(),
+  player: keypair.publicKey(),
   amount: BigInt(1000_0000000), // 1000 USDC (7 decimals)
 });
 
@@ -536,7 +536,7 @@ describe('Deposit', () => {
     const amount = BigInt(100_0000000); // 100 USDC
 
     const result = await contract.deposit({
-      user: user1.publicKey(),
+      player: user1.publicKey(),
       amount,
     });
 
@@ -544,7 +544,7 @@ describe('Deposit', () => {
 
     // Verify balance
     const player = await contract.get_player({
-      user: user1.publicKey(),
+      player: user1.publicKey(),
     });
 
     expect(player.total_deposited).toBe(amount);
@@ -554,14 +554,14 @@ describe('Deposit', () => {
     const beforeTime = Math.floor(Date.now() / 1000);
 
     await contract.deposit({
-      user: user1.publicKey(),
+      player: user1.publicKey(),
       amount: BigInt(50_0000000),
     });
 
     const afterTime = Math.floor(Date.now() / 1000);
 
     const player = await contract.get_player({
-      user: user1.publicKey(),
+      player: user1.publicKey(),
     });
 
     // Timestamp should be between before and after
@@ -585,25 +585,25 @@ describe('Game Lifecycle', () => {
   });
 
   beforeAll(async () => {
-    // Setup: deposit for both users
+    // Setup: deposit for both players
     await contract.deposit({
-      user: user1.publicKey(),
+      player: user1.publicKey(),
       amount: BigInt(1000_0000000),
     });
 
     await contract.deposit({
-      user: user2.publicKey(),
+      player: user2.publicKey(),
       amount: BigInt(1000_0000000),
     });
 
     // Select factions
     await contract.select_faction({
-      user: user1.publicKey(),
+      player: user1.publicKey(),
       faction: 0, // WholeNoodle
     });
 
     await contract.select_faction({
-      user: user2.publicKey(),
+      player: user2.publicKey(),
       faction: 1, // PointyStick
     });
   });
@@ -623,7 +623,7 @@ describe('Game Lifecycle', () => {
 
     // Check fp locked
     const player1Data = await contract.get_epoch_player({
-      user: user1.publicKey(),
+      player: user1.publicKey(),
     });
 
     expect(player1Data.locked_fp).toBe(BigInt(100_0000000));

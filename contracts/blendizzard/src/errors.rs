@@ -18,12 +18,12 @@ pub enum Error {
     AlreadyInitialized = 2,
 
     // ========================================================================
-    // User errors (10-19)
+    // Player errors (10-19)
     // ========================================================================
-    /// User has insufficient balance for the requested operation
+    /// Player has insufficient balance for the requested operation
     InsufficientBalance = 10,
 
-    /// User has insufficient faction points for the requested wager
+    /// Player has insufficient faction points for the requested wager
     InsufficientFactionPoints = 11,
 
     /// Amount is invalid (e.g., zero or negative)
@@ -32,13 +32,13 @@ pub enum Error {
     /// Faction ID is invalid (must be 0, 1, or 2)
     InvalidFaction = 13,
 
-    /// User's faction is already locked for this epoch (cannot change)
+    /// Player's faction is already locked for this epoch (cannot change)
     FactionAlreadyLocked = 14,
 
-    /// User does not exist (no deposits or interactions yet)
-    UserNotFound = 15,
+    /// Player does not exist (no deposits or interactions yet)
+    PlayerNotFound = 15,
 
-    /// User must select a faction before playing games
+    /// Player must select a faction before playing games
     FactionNotSelected = 16,
 
     // ========================================================================
@@ -80,13 +80,13 @@ pub enum Error {
     // ========================================================================
     // Reward errors (40-49)
     // ========================================================================
-    /// No rewards available for this user in this epoch
+    /// No rewards available for this player in this epoch
     NoRewardsAvailable = 40,
 
     /// Reward has already been claimed for this epoch
     RewardAlreadyClaimed = 41,
 
-    /// User was not in the winning faction for this epoch
+    /// Player was not in the winning faction for this epoch
     NotWinningFaction = 42,
 
     // ========================================================================

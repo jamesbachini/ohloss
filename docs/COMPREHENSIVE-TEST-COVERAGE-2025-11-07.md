@@ -61,7 +61,7 @@
 - Small withdrawal no reset: comprehensive::test_small_withdrawal_does_not_reset
 - Withdrawal exploit prevention: security::test_withdrawal_reset_exploit_prevented
 - Rapid cycles: vault_integration::test_rapid_deposit_withdraw_cycles
-- Multiple users: vault_integration::test_multiple_users_isolation
+- Multiple players: vault_integration::test_multiple_users_isolation
 
 ### ✅ Faction System (3/3 functions)
 
@@ -201,7 +201,7 @@ Appropriate use of mocks for:
 | **Error states** | Invalid faction, duplicate session, not whitelisted | ✅ Full |
 | **Timing issues** | Epoch not ready, already finalized | ✅ Full |
 | **State transitions** | Pause/unpause, faction locking, epoch cycling | ✅ Full |
-| **Multi-user scenarios** | User isolation, multiple games, varying deposits | ✅ Full |
+| **Multi-player scenarios** | Player isolation, multiple games, varying deposits | ✅ Full |
 
 ## Critical Invariants Testing
 
@@ -245,7 +245,7 @@ All critical invariants are tested:
 
 2. **Extreme Scale Testing**
    - Status: ⚠️ Not explicitly tested
-   - Missing: Very large number of simultaneous users/games
+   - Missing: Very large number of simultaneous players/games
    - Risk: Low - current tests cover realistic scenarios
    - Recommendation: Consider load/stress testing in testnet
 
@@ -260,7 +260,7 @@ All critical invariants are tested:
 1. ✅ **Excellent integration testing** - Real Soroswap contracts used
 2. ✅ **Comprehensive security testing** - All attack vectors covered
 3. ✅ **Edge case coverage** - Boundary conditions thoroughly tested
-4. ✅ **Multi-scenario testing** - Various user interactions tested
+4. ✅ **Multi-scenario testing** - Various player interactions tested
 5. ✅ **Pause mechanism** - Fully validated across all functions
 
 ## Recommendations

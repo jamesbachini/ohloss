@@ -1,6 +1,6 @@
 use soroban_sdk::{contracttype, Address, Env};
 
-use crate::types::{Config, EpochInfo, EpochUser, GameSession, User};
+use crate::types::{Config, EpochInfo, EpochPlayer, GameSession, Player, PlayerV0, PlayerV1};
 
 // ============================================================================
 // Storage Keys
@@ -9,8 +9,8 @@ use crate::types::{Config, EpochInfo, EpochUser, GameSession, User};
 //
 // Storage Types:
 // - Instance: Admin, Config, CurrentEpoch, Paused
-// - Persistent: User, Game
-// - Temporary: EpochUser, Epoch, Session, Claimed
+// - Persistent: Player, Game
+// - Temporary: EpochPlayer, Epoch, Session, Claimed
 
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -27,11 +27,21 @@ pub enum DataKey {
     /// Pause state - singleton (Instance storage)
     Paused,
 
-    /// User persistent data - User(user_address) -> User (Persistent storage)
+    /// OLD - Player persistent data (for migration only - DO NOT USE)
+    /// This variant exists only to support migration from old storage keys
+    #[deprecated]
     User(Address),
 
-    /// User epoch-specific data - EpochUser(epoch_number, user_address) -> EpochUser (Temporary storage)
+    /// Player persistent data - Player(player_address) -> Player (Persistent storage)
+    Player(Address),
+
+    /// OLD - Player epoch-specific data (for migration only - DO NOT USE)
+    /// This variant exists only to support migration from old storage keys
+    #[deprecated]
     EpochUser(u32, Address),
+
+    /// Player epoch-specific data - EpochPlayer(epoch_number, player_address) -> EpochPlayer (Temporary storage)
+    EpochPlayer(u32, Address),
 
     /// Epoch metadata - Epoch(epoch_number) -> EpochInfo (Temporary storage)
     Epoch(u32),
@@ -42,7 +52,7 @@ pub enum DataKey {
     /// Whitelisted game contracts - Game(game_address) -> bool (Persistent storage)
     Game(Address),
 
-    /// Reward claim tracking - Claimed(user_address, epoch_number) -> bool (Temporary storage)
+    /// Reward claim tracking - Claimed(player_address, epoch_number) -> bool (Temporary storage)
     Claimed(Address, u32),
 }
 
@@ -94,52 +104,128 @@ pub(crate) fn set_current_epoch(env: &Env, epoch: u32) {
     env.storage().instance().set(&DataKey::CurrentEpoch, &epoch);
 }
 
-/// Get user persistent data
-pub(crate) fn get_user(env: &Env, user: &Address) -> Option<User> {
-    let key = DataKey::User(user.clone());
+/// Get player persistent data
+pub(crate) fn get_player(env: &Env, player: &Address) -> Option<Player> {
+    let key = DataKey::Player(player.clone());
     let result = env.storage().persistent().get(&key);
     if result.is_some() {
-        extend_user_ttl(env, user);
+        extend_player_ttl(env, player);
     }
     result
 }
 
-/// Set user persistent data
-pub(crate) fn set_user(env: &Env, user: &Address, data: &User) {
+/// Set player persistent data
+pub(crate) fn set_player(env: &Env, player: &Address, data: &Player) {
     env.storage()
         .persistent()
-        .set(&DataKey::User(user.clone()), data);
-    extend_user_ttl(env, user);
+        .set(&DataKey::Player(player.clone()), data);
+    extend_player_ttl(env, player);
 }
 
-/// Check if user exists
+/// Migrate player data from old formats to current format
+///
+/// Handles migration from:
+/// - Old storage key (DataKey::Player) to new key (DataKey::Player)
+/// - V0 (pre-Nov 10): selected_faction, total_deposited, deposit_timestamp
+/// - V1 (Nov 10-12): selected_faction, deposit_timestamp, last_epoch_balance
+/// - V2 (current): selected_faction, time_multiplier_start, last_epoch_balance
+///
+/// This reads old storage keys and struct formats, deletes them, and writes back the current format.
+/// Returns true if migration was performed, false if player doesn't exist or is already migrated.
+pub(crate) fn migrate_player_storage(env: &Env, player: &Address) -> bool {
+    let new_key = DataKey::Player(player.clone());
+    let old_key = DataKey::User(player.clone());
+
+    // Try to read as current format (V2) with new key first
+    if let Some(_) = get_player(env, player) {
+        // Already in new format with new key, no migration needed
+        return false;
+    }
+
+    // Try to read from old key as V1 format (deposit_timestamp + last_epoch_balance)
+    let v1_data: Option<PlayerV1> = env.storage().persistent().get(&old_key);
+    if let Some(old) = v1_data {
+        // Convert V1 to V2
+        let new_data = Player {
+            selected_faction: old.selected_faction,
+            time_multiplier_start: old.deposit_timestamp, // Field rename
+            last_epoch_balance: old.last_epoch_balance,
+        };
+
+        // Delete old key
+        env.storage().persistent().remove(&old_key);
+
+        // Write back with new key and format
+        set_player(env, player, &new_data);
+        return true;
+    }
+
+    // Try to read from old key as V0 format (total_deposited + deposit_timestamp)
+    let v0_data: Option<PlayerV0> = env.storage().persistent().get(&old_key);
+    if let Some(old) = v0_data {
+        // Convert V0 to V2
+        let new_data = Player {
+            selected_faction: old.selected_faction,
+            time_multiplier_start: old.deposit_timestamp, // Field rename
+            last_epoch_balance: 0, // V0 didn't track this, set to 0 (no previous epoch)
+        };
+
+        // Delete old key
+        env.storage().persistent().remove(&old_key);
+
+        // Write back with new key and format
+        set_player(env, player, &new_data);
+        return true;
+    }
+
+    // Try to read from new key as V2 format but check if it needs schema fix
+    // This handles the edge case where key was already migrated but schema wasn't
+    let new_key_v1: Option<PlayerV1> = env.storage().persistent().get(&new_key);
+    if let Some(old) = new_key_v1 {
+        let new_data = Player {
+            selected_faction: old.selected_faction,
+            time_multiplier_start: old.deposit_timestamp,
+            last_epoch_balance: old.last_epoch_balance,
+        };
+        env.storage().persistent().remove(&new_key);
+        set_player(env, player, &new_data);
+        return true;
+    }
+
+    // Player doesn't exist in any format
+    false
+}
+
+/// Check if player exists
 #[allow(dead_code)]
-pub(crate) fn has_user(env: &Env, user: &Address) -> bool {
-    env.storage().persistent().has(&DataKey::User(user.clone()))
+pub(crate) fn has_player(env: &Env, player: &Address) -> bool {
+    env.storage()
+        .persistent()
+        .has(&DataKey::Player(player.clone()))
 }
 
-/// Get epoch-specific user data
-pub(crate) fn get_epoch_user(env: &Env, epoch: u32, user: &Address) -> Option<EpochUser> {
-    let key = DataKey::EpochUser(epoch, user.clone());
+/// Get epoch-specific player data
+pub(crate) fn get_epoch_player(env: &Env, epoch: u32, player: &Address) -> Option<EpochPlayer> {
+    let key = DataKey::EpochPlayer(epoch, player.clone());
     let result = env.storage().temporary().get(&key);
     if result.is_some() {
-        extend_epoch_user_ttl(env, epoch, user);
+        extend_epoch_player_ttl(env, epoch, player);
     }
     result
 }
 
-/// Set epoch-specific user data
-pub(crate) fn set_epoch_user(env: &Env, epoch: u32, user: &Address, data: &EpochUser) {
-    let key = DataKey::EpochUser(epoch, user.clone());
+/// Set epoch-specific player data
+pub(crate) fn set_epoch_player(env: &Env, epoch: u32, player: &Address, data: &EpochPlayer) {
+    let key = DataKey::EpochPlayer(epoch, player.clone());
     env.storage().temporary().set(&key, data);
-    extend_epoch_user_ttl(env, epoch, user);
+    extend_epoch_player_ttl(env, epoch, player);
 }
 
-/// Check if epoch user exists
-pub(crate) fn has_epoch_user(env: &Env, epoch: u32, user: &Address) -> bool {
+/// Check if epoch player exists
+pub(crate) fn has_epoch_player(env: &Env, epoch: u32, player: &Address) -> bool {
     env.storage()
         .temporary()
-        .has(&DataKey::EpochUser(epoch, user.clone()))
+        .has(&DataKey::EpochPlayer(epoch, player.clone()))
 }
 
 /// Get epoch metadata
@@ -203,23 +289,23 @@ pub(crate) fn remove_game_from_whitelist(env: &Env, game_id: &Address) {
         .remove(&DataKey::Game(game_id.clone()));
 }
 
-/// Check if user has claimed rewards for an epoch
-pub(crate) fn has_claimed(env: &Env, user: &Address, epoch: u32) -> bool {
-    let key = DataKey::Claimed(user.clone(), epoch);
+/// Check if player has claimed rewards for an epoch
+pub(crate) fn has_claimed(env: &Env, player: &Address, epoch: u32) -> bool {
+    let key = DataKey::Claimed(player.clone(), epoch);
     let result: Option<bool> = env.storage().temporary().get(&key);
     if let Some(true) = result {
-        extend_claimed_ttl(env, user, epoch);
+        extend_claimed_ttl(env, player, epoch);
         true
     } else {
         false
     }
 }
 
-/// Mark rewards as claimed for user and epoch
-pub(crate) fn set_claimed(env: &Env, user: &Address, epoch: u32) {
-    let key = DataKey::Claimed(user.clone(), epoch);
+/// Mark rewards as claimed for player and epoch
+pub(crate) fn set_claimed(env: &Env, player: &Address, epoch: u32) {
+    let key = DataKey::Claimed(player.clone(), epoch);
     env.storage().temporary().set(&key, &true);
-    extend_claimed_ttl(env, user, epoch);
+    extend_claimed_ttl(env, player, epoch);
 }
 
 // ============================================================================
@@ -228,12 +314,12 @@ pub(crate) fn set_claimed(env: &Env, user: &Address, epoch: u32) {
 // TTL (Time To Live) management ensures data doesn't expire unexpectedly
 // Based on Soroban best practices:
 // - Instance storage: Tied to contract lifetime (Admin, Config, CurrentEpoch, Paused)
-// - Persistent storage: Cross-epoch data (User, Game whitelist) - extends to 30 days when accessed
-// - Temporary storage: Epoch-specific data (EpochUser, Epoch, Claimed, Session) - 30 days from last interaction
+// - Persistent storage: Cross-epoch data (Player, Game whitelist) - extends to 30 days when accessed
+// - Temporary storage: Epoch-specific data (EpochPlayer, Epoch, Claimed, Session) - 30 days from last interaction
 //
 // Storage Type Summary:
 // - Instance: Config-type variables that persist for contract lifetime
-// - Persistent: User data and game whitelist that must survive across epochs
+// - Persistent: Player data and game whitelist that must survive across epochs
 // - Temporary: Epoch-specific data that expires 30 days after last access
 
 /// TTL thresholds and extensions (in ledgers, ~5 seconds per ledger)
@@ -242,21 +328,21 @@ pub(crate) fn set_claimed(env: &Env, user: &Address, epoch: u32) {
 const TTL_THRESHOLD_LEDGERS: u32 = 120_960; // Extend if < 7 days remaining
 const TTL_EXTEND_TO_LEDGERS: u32 = 518_400; // Extend to 30 days
 
-/// Extend TTL for user data
-/// Should be called whenever user data is read/written
-pub(crate) fn extend_user_ttl(env: &Env, user: &Address) {
+/// Extend TTL for player data
+/// Should be called whenever player data is read/written
+pub(crate) fn extend_player_ttl(env: &Env, player: &Address) {
     env.storage().persistent().extend_ttl(
-        &DataKey::User(user.clone()),
+        &DataKey::Player(player.clone()),
         TTL_THRESHOLD_LEDGERS,
         TTL_EXTEND_TO_LEDGERS,
     );
 }
 
-/// Extend TTL for epoch user data (temporary storage)
-/// Should be called whenever epoch user data is read/written
-pub(crate) fn extend_epoch_user_ttl(env: &Env, epoch: u32, user: &Address) {
+/// Extend TTL for epoch player data (temporary storage)
+/// Should be called whenever epoch player data is read/written
+pub(crate) fn extend_epoch_player_ttl(env: &Env, epoch: u32, player: &Address) {
     env.storage().temporary().extend_ttl(
-        &DataKey::EpochUser(epoch, user.clone()),
+        &DataKey::EpochPlayer(epoch, player.clone()),
         TTL_THRESHOLD_LEDGERS,
         TTL_EXTEND_TO_LEDGERS,
     );
@@ -274,9 +360,9 @@ pub(crate) fn extend_epoch_ttl(env: &Env, epoch: u32) {
 
 /// Extend TTL for claimed rewards data (temporary storage)
 /// Should be called whenever claim data is written
-pub(crate) fn extend_claimed_ttl(env: &Env, user: &Address, epoch: u32) {
+pub(crate) fn extend_claimed_ttl(env: &Env, player: &Address, epoch: u32) {
     env.storage().temporary().extend_ttl(
-        &DataKey::Claimed(user.clone(), epoch),
+        &DataKey::Claimed(player.clone(), epoch),
         TTL_THRESHOLD_LEDGERS,
         TTL_EXTEND_TO_LEDGERS,
     );
@@ -318,7 +404,7 @@ pub(crate) fn set_pause_state(env: &Env, paused: bool) {
 }
 
 /// Check if contract is not paused, return error if paused
-/// Call this at the start of all user-facing functions
+/// Call this at the start of all player-facing functions
 pub(crate) fn require_not_paused(env: &Env) -> Result<(), crate::errors::Error> {
     if is_paused(env) {
         Err(crate::errors::Error::ContractPaused)

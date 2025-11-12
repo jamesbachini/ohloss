@@ -142,19 +142,19 @@ stellar contract deploy \
 
 ### Architecture Model: Cross-Epoch Balance Tracking
 
-**Key Design Principle**: Users interact directly with fee-vault-v2 for deposits/withdrawals. Blendizzard queries balances and enforces game rules at epoch boundaries.
+**Key Design Principle**: Players interact directly with fee-vault-v2 for deposits/withdrawals. Blendizzard queries balances and enforces game rules at epoch boundaries.
 
 **Flow:**
-1. User deposits to fee-vault-v2 directly (no intermediate Blendizzard deposit call)
-2. User plays first game of Epoch N → Blendizzard queries vault balance
+1. Player deposits to fee-vault-v2 directly (no intermediate Blendizzard deposit call)
+2. Player plays first game of Epoch N → Blendizzard queries vault balance
 3. Balance compared to last epoch → If >50% withdrawal, reset time multiplier
 4. FP calculated based on current balance + multipliers
-5. FP remains valid for entire epoch (even if user withdraws mid-epoch)
+5. FP remains valid for entire epoch (even if player withdraws mid-epoch)
 6. Epoch N+1 starts → Fresh calculation at first game
 
 **Benefits:**
-- Simpler user flow (direct vault interaction)
-- Reduced storage (~32 bytes per active user)
+- Simpler player flow (direct vault interaction)
+- Reduced storage (~32 bytes per active player)
 - Rewards sustained balances across many epochs
 - Accepts mid-epoch capital flexibility
 
@@ -178,7 +178,7 @@ contracts/blendizzard/src/
 ```
 
 **Note**: `vault.rs` no longer contains deposit/withdraw methods. It provides:
-- `get_vault_balance()` - Query user balance from fee-vault-v2
+- `get_vault_balance()` - Query player balance from fee-vault-v2
 - `check_cross_epoch_withdrawal_reset()` - Compare balances between epochs
 
 ### External Dependencies
@@ -187,8 +187,8 @@ The contract integrates with three external Soroban contracts:
 
 1. **fee-vault-v2** (https://github.com/script3/fee-vault-v2)
    - Yield-generating vault for BLND token
-   - **Users interact directly**: Call `deposit()` and `withdraw()` on fee-vault-v2
-   - **Blendizzard queries balances**: `get_underlying_tokens(user)` at first game of epoch
+   - **Players interact directly**: Call `deposit()` and `withdraw()` on fee-vault-v2
+   - **Blendizzard queries balances**: `get_underlying_tokens(player)` at first game of epoch
    - **Admin role**: Blendizzard withdraws accumulated fees via `admin_withdraw()`
 
 2. **Soroswap Router** (https://github.com/soroswap/core)
@@ -203,18 +203,18 @@ The contract integrates with three external Soroban contracts:
 
 Key storage types (defined in contracts/blendizzard/src/types.rs):
 
-**User (Persistent across epochs):**
+**Player (Persistent across epochs):**
 ```rust
-pub struct User {
+pub struct Player {
     pub selected_faction: u32,       // Persistent faction preference
     pub deposit_timestamp: u64,      // Time multiplier tracking
     pub last_epoch_balance: i128,    // For cross-epoch comparison
 }
 ```
 
-**EpochUser (Per-epoch state):**
+**EpochPlayer (Per-epoch state):**
 ```rust
-pub struct EpochUser {
+pub struct EpochPlayer {
     pub epoch_faction: Option<u32>,      // Locked faction for this epoch
     pub initial_balance: i128,           // Vault snapshot at first game
     pub available_fp: i128,              // Spendable FP
@@ -229,16 +229,16 @@ pub struct EpochUser {
 - `GameOutcome`: Verified game results
 
 **Key Changes in Cross-Epoch Architecture:**
-- Removed `User.total_deposited` (query vault instead)
-- Removed `EpochUser.withdrawn_this_epoch` (no within-epoch tracking)
+- Removed `Player.total_deposited` (query vault instead)
+- Removed `EpochPlayer.withdrawn_this_epoch` (no within-epoch tracking)
 - Renamed `initial_epoch_balance` → `initial_balance` (clearer naming)
-- Added `User.last_epoch_balance` (for cross-epoch withdrawal detection)
+- Added `Player.last_epoch_balance` (for cross-epoch withdrawal detection)
 
 Storage keys use enum-based typing for collision-free access:
 ```rust
 pub enum DataKey {
-    User(Address),
-    EpochUser(u32, Address),
+    Player(Address),
+    EpochPlayer(u32, Address),
     Epoch(u32),
     Session(BytesN<32>),
 }
@@ -283,10 +283,10 @@ let result = temp
 
 The contract MUST maintain these invariants at all times:
 
-1. **FP Conservation**: `sum(all_users.available_fp + locked_fp) = total_fp_in_system`
+1. **FP Conservation**: `sum(all_players.available_fp + locked_fp) = total_fp_in_system`
 2. **Balance Consistency**: FP calculated from vault balances at epoch boundaries
-   - `EpochUser.initial_balance` matches vault balance at first game of epoch
-   - Users may deposit/withdraw mid-epoch without FP recalculation
+   - `EpochPlayer.initial_balance` matches vault balance at first game of epoch
+   - Players may deposit/withdraw mid-epoch without FP recalculation
 3. **Faction Immutability**: Once locked in epoch, faction cannot change
 4. **Reward Distribution**: `sum(claimed_rewards) <= epoch.reward_pool`
 5. **Session Uniqueness**: Each `session_id` is unique and consumed after game end
@@ -296,14 +296,14 @@ The contract MUST maintain these invariants at all times:
 
 - **Flash Deposit Attack**: Mitigated by time multiplier (starts at 1.0x)
 - **Epoch Boundary Gaming**: Cross-epoch comparison allows timing attacks, accepted trade-off
-  - Users can time deposits/withdrawals around epoch boundaries
+  - Players can time deposits/withdrawals around epoch boundaries
   - FP remains valid for entire epoch even after mid-epoch withdrawals
   - Design prioritizes sustained balances over micro-management
 - **Faction Switching**: Faction locks on first game of epoch
 - **Integer Overflow**: Use checked arithmetic everywhere
 - **Replay Attacks**: Session IDs are unique and single-use
 - **Oracle Trust**: Multi-sig oracle for Phase 1-2, migrate to ZK proofs later
-- **Direct Vault Interaction**: Users who deposit/withdraw via vault directly (bypassing UI)
+- **Direct Vault Interaction**: Players who deposit/withdraw via vault directly (bypassing UI)
   - Balance correctly tracked via queries at first game
   - No security issue, just unconventional UX
 
@@ -355,7 +355,7 @@ const contract = new Contract({
 
 // Type-safe contract calls
 await contract.deposit({
-  user: userAddress,
+  player: userAddress,
   amount: BigInt(1000_0000000), // 1000 USDC (7 decimals)
 });
 ```

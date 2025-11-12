@@ -81,7 +81,7 @@ pub(crate) fn is_game(env: &Env, game_id: &Address) -> bool {
 /// "When a game starts there's actually quite a bit that needs to be recorded:
 /// - If it's the players first game for the epoch we need to lock in their total
 ///   available factions points for the epoch
-/// - Lock in the user's faction if it hasn't been elected yet via `select_faction`"
+/// - Lock in the player's faction if it hasn't been elected yet via `select_faction`"
 ///
 /// # Arguments
 /// * `env` - Contract environment
@@ -132,8 +132,8 @@ pub(crate) fn start_game(
 
     // CRITICAL: Validate both players have explicitly selected a faction
     // This check must happen BEFORE any other initialization logic
-    storage::get_user(env, player1).ok_or(Error::FactionNotSelected)?;
-    storage::get_user(env, player2).ok_or(Error::FactionNotSelected)?;
+    storage::get_player(env, player1).ok_or(Error::FactionNotSelected)?;
+    storage::get_player(env, player2).ok_or(Error::FactionNotSelected)?;
 
     // Get current epoch
     let current_epoch = storage::get_current_epoch(env);
@@ -143,7 +143,7 @@ pub(crate) fn start_game(
     initialize_player_epoch(env, player1, current_epoch)?;
     initialize_player_epoch(env, player2, current_epoch)?;
 
-    // Lock factions for both players (stored in EpochUser.epoch_faction)
+    // Lock factions for both players (stored in EpochPlayer.epoch_faction)
     lock_epoch_faction(env, player1, current_epoch)?;
     lock_epoch_faction(env, player2, current_epoch)?;
 
@@ -264,9 +264,9 @@ pub(crate) fn end_game(
     // Only the winner's wager contributes to their faction standings
 
     // Get both players' epoch data
-    let mut winner_epoch = storage::get_epoch_user(env, current_epoch, winner)
+    let mut winner_epoch = storage::get_epoch_player(env, current_epoch, winner)
         .ok_or(Error::InsufficientFactionPoints)?;
-    let mut loser_epoch = storage::get_epoch_user(env, current_epoch, loser)
+    let mut loser_epoch = storage::get_epoch_player(env, current_epoch, loser)
         .ok_or(Error::InsufficientFactionPoints)?;
 
     // Step 1: Remove winner's wager from locked_fp (spent/burned)
@@ -288,8 +288,8 @@ pub(crate) fn end_game(
         .ok_or(Error::OverflowError)?;
 
     // Save both players' updated data
-    storage::set_epoch_user(env, current_epoch, winner, &winner_epoch);
-    storage::set_epoch_user(env, current_epoch, loser, &loser_epoch);
+    storage::set_epoch_player(env, current_epoch, winner, &winner_epoch);
+    storage::set_epoch_player(env, current_epoch, loser, &loser_epoch);
 
     // Update session
     session.status = GameStatus::Completed;
@@ -314,12 +314,12 @@ pub(crate) fn end_game(
 /// **NEW ARCHITECTURE (Cross-Epoch Balance Comparison):**
 /// 1. Query current vault balance
 /// 2. Check for >50% withdrawal since last epoch
-/// 3. Initialize time_multiplier_start if first-time user
+/// 3. Initialize time_multiplier_start if first-time player
 /// 4. Calculate FP based on current balance + multipliers
 /// 5. Save epoch snapshot and update last_epoch_balance
 fn initialize_player_epoch(env: &Env, player: &Address, current_epoch: u32) -> Result<(), Error> {
     // Check if player already has epoch data
-    if storage::has_epoch_user(env, current_epoch, player) {
+    if storage::has_epoch_player(env, current_epoch, player) {
         // Already initialized this epoch
         return Ok(());
     }
@@ -327,16 +327,16 @@ fn initialize_player_epoch(env: &Env, player: &Address, current_epoch: u32) -> R
     // STEP 1: Query current vault balance
     let current_balance = crate::vault::get_vault_balance(env, player);
 
-    // STEP 2: Get or create user record
-    let mut user_data = storage::get_user(env, player).unwrap_or(crate::types::User {
+    // STEP 2: Get or create player record
+    let mut player_data = storage::get_player(env, player).unwrap_or(crate::types::Player {
         selected_faction: 0, // Default to WholeNoodle
         time_multiplier_start: 0,
         last_epoch_balance: 0,
     });
 
-    // STEP 3: Initialize time_multiplier_start if first-time user
-    if user_data.time_multiplier_start == 0 && current_balance > 0 {
-        user_data.time_multiplier_start = env.ledger().timestamp();
+    // STEP 3: Initialize time_multiplier_start if first-time player
+    if player_data.time_multiplier_start == 0 && current_balance > 0 {
+        player_data.time_multiplier_start = env.ledger().timestamp();
     }
 
     // STEP 4: Check for cross-epoch withdrawal reset (>50%)
@@ -347,8 +347,8 @@ fn initialize_player_epoch(env: &Env, player: &Address, current_epoch: u32) -> R
     initialize_epoch_fp(env, player, current_epoch)?;
 
     // STEP 6: Update last_epoch_balance for next epoch comparison
-    user_data.last_epoch_balance = current_balance;
-    storage::set_user(env, player, &user_data);
+    player_data.last_epoch_balance = current_balance;
+    storage::set_player(env, player, &player_data);
 
     Ok(())
 }
@@ -382,10 +382,10 @@ fn update_faction_standings(
     current_epoch: u32,
 ) -> Result<(), Error> {
     // Get winner's faction
-    let epoch_user = storage::get_epoch_user(env, current_epoch, winner)
+    let epoch_player = storage::get_epoch_player(env, current_epoch, winner)
         .ok_or(Error::InsufficientFactionPoints)?;
 
-    let faction = epoch_user
+    let faction = epoch_player
         .epoch_faction
         .ok_or(Error::FactionAlreadyLocked)?;
 

@@ -27,4 +27,4 @@ stellar contract upload --wasm target/wasm32v1-none/release/blendizzard.optimize
 stellar contract invoke --id CAK6Z6KFMB3V2ENEJ7THVKXUYQ5EG7EL2TM5UQ2FLDXI37FS6DRIMIZH --source rich --fee 10000000 -- upgrade --new_wasm_hash 0fd48b93a642fe22204b467ef427c881f75f640b8708547211d501a0e0bd74ed
 
 // deposit 5 USDC
-stellar contract invoke --id CBBY53VYJSMAWCBZZ7BHJZ5XSZNJUS4ZE6Q4RN7TKZGHPYHMEE467W7Y --network mainnet --source default --fee 10000000 -- deposit --user default --amount 50000000
+stellar contract invoke --id CBBY53VYJSMAWCBZZ7BHJZ5XSZNJUS4ZE6Q4RN7TKZGHPYHMEE467W7Y --network mainnet --source default --fee 10000000 -- deposit --player default --amount 50000000

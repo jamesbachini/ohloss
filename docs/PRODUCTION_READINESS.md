@@ -17,12 +17,12 @@ All critical production-readiness features have been implemented and thoroughly 
 **Location**: `contracts/blendizzard/src/rewards.rs:102-105`
 
 - Implemented actual USDC token transfer in `claim_yield()` function
-- Uses Soroban token client to transfer rewards from contract to user
+- Uses Soroban token client to transfer rewards from contract to player
 - Properly integrated with reward calculation and claiming logic
 
 ```rust
 let usdc_client = soroban_sdk::token::Client::new(env, &config.usdc_token);
-usdc_client.transfer(&env.current_contract_address(), user, &reward_amount);
+usdc_client.transfer(&env.current_contract_address(), player, &reward_amount);
 ```
 
 ### 2. ✅ TTL (Time-To-Live) Storage Management
@@ -36,24 +36,24 @@ usdc_client.transfer(&env.current_contract_address(), user, &reward_amount);
 - Integrated into all storage getters and setters
 
 **Functions Added**:
-- `extend_user_ttl()` - Extends TTL for user data
-- `extend_epoch_user_ttl()` - Extends TTL for epoch user data
+- `extend_player_ttl()` - Extends TTL for player data
+- `extend_epoch_player_ttl()` - Extends TTL for epoch player data
 - `extend_epoch_ttl()` - Extends TTL for epoch metadata
 - `extend_instance_ttl()` - Extends TTL for instance storage
 
 ### 3. ✅ Faction Points Reset Logic
 **Location**: `contracts/blendizzard/src/vault.rs:186-197`
 
-- Implemented FP recalculation when user withdraws >50% of epoch balance
+- Implemented FP recalculation when player withdraws >50% of epoch balance
 - Properly resets time multiplier to 1.0x (timestamp is reset)
 - Maintains locked FP (points in active games) while updating available FP
 - Prevents gaming the system through strategic withdrawals
 
 ```rust
 if reset {
-    user_data.deposit_timestamp = env.ledger().timestamp();
-    let new_fp = crate::faction_points::calculate_faction_points(env, user)?;
-    epoch_user.available_fp = new_fp.saturating_sub(epoch_user.locked_fp);
+    player_data.deposit_timestamp = env.ledger().timestamp();
+    let new_fp = crate::faction_points::calculate_faction_points(env, player)?;
+    epoch_player.available_fp = new_fp.saturating_sub(epoch_player.locked_fp);
 }
 ```
 
@@ -82,7 +82,7 @@ if reset {
 
 - Added `is_paused` boolean flag to Config
 - Implemented pause/unpause admin functions
-- Added `require_not_paused()` check to all critical user functions:
+- Added `require_not_paused()` check to all critical player functions:
   - `deposit()`
   - `withdraw()`
   - `start_game()`
@@ -90,7 +90,7 @@ if reset {
 - New error: `ContractPaused` (code 70)
 
 **Admin Functions**:
-- `pause()` - Stops all user operations (emergency stop)
+- `pause()` - Stops all player operations (emergency stop)
 - `unpause()` - Restores normal functionality
 - `is_paused()` - Query current pause state
 
@@ -191,9 +191,9 @@ pub fn end_game(...) -> Result<(), Error> {
 #### Fix #1: Withdrawal Reset Timing Exploit
 **Location**: `contracts/blendizzard/src/vault.rs:59-76`
 
-**Issue**: Users could cycle deposits/withdrawals under 50% threshold to maintain high faction points while extracting capital.
+**Issue**: Players could cycle deposits/withdrawals under 50% threshold to maintain high faction points while extracting capital.
 
-**Fix Applied**: Added logic to reset `withdrawn_this_epoch` when users re-deposit during the same epoch, preventing gaming of the withdrawal threshold.
+**Fix Applied**: Added logic to reset `withdrawn_this_epoch` when players re-deposit during the same epoch, preventing gaming of the withdrawal threshold.
 
 **Tests**: 3 comprehensive security tests added (`src/tests/security.rs:22-161`)
 - `test_withdrawal_reset_exploit_prevented()`
@@ -374,7 +374,7 @@ stellar contract invoke \
 ### Short Term (Next Month)
 1. **Testnet Deploy**: Deploy to Stellar testnet and test thoroughly
 2. **Oracle Design**: Finalize multi-sig oracle approach (client-side for MVP)
-3. **Documentation**: Complete user-facing documentation
+3. **Documentation**: Complete player-facing documentation
 4. **Integration Tests**: Full cycle testing with deployed contracts
 5. **Fee-Vault Admin**: Ensure Blendizzard contract is set as admin of fee-vault
 
@@ -400,7 +400,7 @@ stellar contract invoke \
 ### Low Priority
 7. ⏳ **Documentation**: Add inline documentation for complex functions
 8. ⏳ **Monitoring**: Set up off-chain monitoring for events
-9. ⏳ **User Guide**: Create user-facing documentation
+9. ⏳ **Player Guide**: Create player-facing documentation
 
 ## Conclusion
 

@@ -2,7 +2,7 @@
 ///
 /// This file adds critical test coverage for:
 /// - Reward claiming (happy path, double-claim, non-winning faction)
-/// - Pause mechanism (blocks user functions, allows admin functions)
+/// - Pause mechanism (blocks player functions, allows admin functions)
 /// - Error paths (invalid inputs, unauthorized calls)
 /// - Cross-epoch scenarios
 use super::fee_vault_utils::{create_mock_vault, MockVaultClient};
@@ -108,13 +108,13 @@ fn test_pause_blocks_claim_epoch_reward() {
     let env = setup_test_env();
     let (_game, _vault, _mock_vault, blendizzard, _usdc) = setup_complete_game_env(&env);
 
-    let user = Address::generate(&env);
+    let player = Address::generate(&env);
 
     // Pause contract
     blendizzard.pause();
 
     // claim_epoch_reward should fail when paused
-    let result = blendizzard.try_claim_epoch_reward(&user, &0);
+    let result = blendizzard.try_claim_epoch_reward(&player, &0);
     assert!(
         result.is_err(),
         "claim_epoch_reward should fail when paused"
@@ -158,10 +158,10 @@ fn test_claim_epoch_reward_before_epoch_finalized() {
     let env = setup_test_env();
     let (_game, _vault, _mock_vault, blendizzard, _usdc) = setup_complete_game_env(&env);
 
-    let user = Address::generate(&env);
+    let player = Address::generate(&env);
 
     // Try to claim from epoch 0 before it's finalized
-    let result = blendizzard.try_claim_epoch_reward(&user, &0);
+    let result = blendizzard.try_claim_epoch_reward(&player, &0);
     assert!(
         result.is_err(),
         "Should fail to claim from unfinalized epoch"
@@ -285,14 +285,14 @@ fn test_select_invalid_faction() {
     let env = setup_test_env();
     let (_game, _vault, _mock_vault, blendizzard, _usdc) = setup_complete_game_env(&env);
 
-    let user = Address::generate(&env);
+    let player = Address::generate(&env);
 
     // Try to select faction 3 (only 0, 1, 2 are valid)
-    let result = blendizzard.try_select_faction(&user, &3);
+    let result = blendizzard.try_select_faction(&player, &3);
     assert!(result.is_err(), "Should fail with invalid faction ID");
 
     // Try faction 99
-    let result = blendizzard.try_select_faction(&user, &99);
+    let result = blendizzard.try_select_faction(&player, &99);
     assert!(result.is_err(), "Should fail with invalid faction ID");
 }
 
@@ -375,7 +375,7 @@ fn test_time_multiplier_start_initialized_on_first_game() {
 
     // Before first game, player might not exist in storage
     let _player_result = blendizzard.try_get_player(&player);
-    // If user doesn't exist yet, that's OK
+    // If player doesn't exist yet, that's OK
 
     // Start first game
     let session = 30u32;
@@ -510,9 +510,9 @@ fn test_get_player_nonexistent_user() {
 
     let nonexistent_user = Address::generate(&env);
 
-    // Should return error for user that never interacted
+    // Should return error for player that never interacted
     let result = blendizzard.try_get_player(&nonexistent_user);
-    assert!(result.is_err(), "Should fail for nonexistent user");
+    assert!(result.is_err(), "Should fail for nonexistent player");
 }
 
 #[test]
@@ -525,7 +525,7 @@ fn test_get_epoch_player_returns_defaults_before_first_game() {
     mock_vault.set_user_balance(&player, &1000_0000000);
     blendizzard.select_faction(&player, &0);
 
-    // User has selected faction but hasn't played yet
+    // Player has selected faction but hasn't played yet
     let player_data = blendizzard.get_player(&player);
     assert_eq!(player_data.selected_faction, 0);
 
@@ -557,15 +557,12 @@ fn test_get_epoch_player_errors_without_faction_selection() {
 
     let player = Address::generate(&env);
 
-    // User has vault balance but hasn't selected faction
+    // Player has vault balance but hasn't selected faction
     mock_vault.set_user_balance(&player, &1000_0000000);
 
-    // Should error with FactionNotSelected (not UserNotFound)
+    // Should error with FactionNotSelected (not PlayerNotFound)
     let result = blendizzard.try_get_epoch_player(&player);
-    assert!(
-        result.is_err(),
-        "Should error when faction not selected"
-    );
+    assert!(result.is_err(), "Should error when faction not selected");
     // Note: Error code #16 is FactionNotSelected
 }
 

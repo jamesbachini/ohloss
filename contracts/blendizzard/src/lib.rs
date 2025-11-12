@@ -214,8 +214,8 @@ impl Blendizzard {
 
     /// Pause the contract (emergency stop)
     ///
-    /// When paused, all user-facing functions are disabled except admin functions.
-    /// This is an emergency mechanism to protect user funds in case of discovered vulnerabilities.
+    /// When paused, all player-facing functions are disabled except admin functions.
+    /// This is an emergency mechanism to protect player funds in case of discovered vulnerabilities.
     ///
     /// # Errors
     /// * `NotAdmin` - If caller is not the admin
@@ -249,6 +249,34 @@ impl Blendizzard {
     }
 
     // ========================================================================
+    // Migration Functions
+    // ========================================================================
+
+    /// Migration: Update Player struct from old formats to current format
+    ///
+    /// This migration fixes deserialization errors caused by Player struct schema changes:
+    /// - V0 (pre-Nov 10): Had `total_deposited` field instead of `last_epoch_balance`
+    /// - V1 (Nov 10-12): Had `deposit_timestamp` field instead of `time_multiplier_start`
+    /// - V2 (current): Uses `time_multiplier_start` and `last_epoch_balance`
+    ///
+    /// The migration reads old formats, deletes them, and writes back the current format.
+    ///
+    /// # Usage
+    /// Call this for each player address that needs migration. This is typically called:
+    /// - By players themselves when they encounter deserialization errors
+    /// - By admin for known active players
+    ///
+    /// # Arguments
+    /// * `player` - Player address to migrate
+    ///
+    /// # Returns
+    /// * `true` if migration was performed (player had V0 or V1 data)
+    /// * `false` if player data doesn't exist or is already in V2 format
+    pub fn migrate_player(env: Env, player: Address) -> bool {
+        storage::migrate_player_storage(&env, &player)
+    }
+
+    // ========================================================================
     // Game Registry
     // ========================================================================
 
@@ -274,11 +302,11 @@ impl Blendizzard {
     }
 
     // ========================================================================
-    // Vault Operations (REMOVED - Users interact directly with fee-vault-v2)
+    // Vault Operations (REMOVED - Players interact directly with fee-vault-v2)
     // ========================================================================
 
     // ARCHITECTURE CHANGE: deposit() and withdraw() have been removed.
-    // Users now interact directly with the fee-vault-v2 contract for deposits/withdrawals.
+    // Players now interact directly with the fee-vault-v2 contract for deposits/withdrawals.
     // Blendizzard queries vault balances on-demand at game start and performs
     // cross-epoch withdrawal detection at that time.
     //
@@ -286,15 +314,15 @@ impl Blendizzard {
     // To withdraw: Call fee-vault-v2.withdraw() directly
     //
     // The 50% withdrawal reset rule is enforced via cross-epoch balance comparison
-    // when users play their first game of a new epoch.
+    // when players play their first game of a new epoch.
 
     // ========================================================================
     // Faction Selection
     // ========================================================================
 
-    /// Select a faction for the user
+    /// Select a faction for the player
     ///
-    /// Sets the user's persistent faction preference. Can be changed at ANY time.
+    /// Sets the player's persistent faction preference. Can be changed at ANY time.
     /// If you haven't played a game this epoch, the new faction applies immediately.
     /// If you've already played this epoch, the current epoch stays locked to your
     /// old faction, and the new selection applies starting next epoch.
@@ -304,8 +332,8 @@ impl Blendizzard {
     ///
     /// # Errors
     /// * `InvalidFaction` - If faction ID is not 0, 1, or 2
-    pub fn select_faction(env: Env, user: Address, faction: u32) -> Result<(), Error> {
-        faction::select_faction(&env, &user, faction)
+    pub fn select_faction(env: Env, player: Address, faction: u32) -> Result<(), Error> {
+        faction::select_faction(&env, &player, faction)
     }
 
     // ========================================================================
@@ -318,9 +346,9 @@ impl Blendizzard {
     /// and deposit timestamp.
     ///
     /// # Errors
-    /// * `UserNotFound` - If user has never interacted with the contract
-    pub fn get_player(env: Env, user: Address) -> Result<types::User, Error> {
-        storage::get_user(&env, &user).ok_or(Error::UserNotFound)
+    /// * `PlayerNotFound` - If player has never interacted with the contract
+    pub fn get_player(env: Env, player: Address) -> Result<types::Player, Error> {
+        storage::get_player(&env, &player).ok_or(Error::PlayerNotFound)
     }
 
     /// Get player's epoch-specific information for the current epoch
@@ -328,30 +356,30 @@ impl Blendizzard {
     /// Returns complete epoch-specific data including locked faction, available/locked FP,
     /// total FP contributed, and balance snapshot.
     ///
-    /// **NEW BEHAVIOR:** If user hasn't played any games this epoch yet, calculates
+    /// **NEW BEHAVIOR:** If player hasn't played any games this epoch yet, calculates
     /// what their FP WOULD be based on current vault balance without writing to storage.
-    /// This allows UIs to display FP before the user's first game.
+    /// This allows UIs to display FP before the player's first game.
     ///
     /// # Errors
-    /// * `FactionNotSelected` - If user hasn't selected a faction yet
-    pub fn get_epoch_player(env: Env, user: Address) -> Result<types::EpochUser, Error> {
+    /// * `FactionNotSelected` - If player hasn't selected a faction yet
+    pub fn get_epoch_player(env: Env, player: Address) -> Result<types::EpochPlayer, Error> {
         let current_epoch = storage::get_current_epoch(&env);
 
-        // Try to get existing epoch user data
-        if let Some(epoch_user) = storage::get_epoch_user(&env, current_epoch, &user) {
-            return Ok(epoch_user);
+        // Try to get existing epoch player data
+        if let Some(epoch_player) = storage::get_epoch_player(&env, current_epoch, &player) {
+            return Ok(epoch_player);
         }
 
-        // User hasn't played this epoch yet - calculate FP on-the-fly
-        // First, check if user has selected a faction
-        storage::get_user(&env, &user).ok_or(Error::FactionNotSelected)?;
+        // Player hasn't played this epoch yet - calculate FP on-the-fly
+        // First, check if player has selected a faction
+        storage::get_player(&env, &player).ok_or(Error::FactionNotSelected)?;
 
         // Calculate FP using same logic as initialize_player_epoch
-        let total_fp = faction_points::calculate_faction_points(&env, &user)?;
-        let current_balance = vault::get_vault_balance(&env, &user);
+        let total_fp = faction_points::calculate_faction_points(&env, &player)?;
+        let current_balance = vault::get_vault_balance(&env, &player);
 
-        // Return computed EpochUser (not saved to storage yet)
-        Ok(types::EpochUser {
+        // Return computed EpochPlayer (not saved to storage yet)
+        Ok(types::EpochPlayer {
             epoch_faction: None, // Faction not locked until first game
             epoch_balance_snapshot: current_balance,
             available_fp: total_fp,
@@ -452,9 +480,9 @@ impl Blendizzard {
     // Reward Claims
     // ========================================================================
 
-    /// Claim epoch reward for a user for a specific epoch
+    /// Claim epoch reward for a player for a specific epoch
     ///
-    /// Users who contributed FP to the winning faction can claim their share
+    /// Players who contributed FP to the winning faction can claim their share
     /// of the epoch's reward pool (USDC converted from BLND yield).
     ///
     /// **Note:** To check claimable amounts or claim status before calling,
@@ -465,15 +493,14 @@ impl Blendizzard {
     ///
     /// # Errors
     /// * `EpochNotFinalized` - If epoch doesn't exist or isn't finalized
-    /// * `RewardAlreadyClaimed` - If user already claimed for this epoch
-    /// * `NotWinningFaction` - If user wasn't in the winning faction
-    /// * `NoRewardsAvailable` - If user has no rewards to claim
+    /// * `RewardAlreadyClaimed` - If player already claimed for this epoch
+    /// * `NotWinningFaction` - If player wasn't in the winning faction
+    /// * `NoRewardsAvailable` - If player has no rewards to claim
     /// * `ContractPaused` - If contract is in emergency pause mode
-    pub fn claim_epoch_reward(env: Env, user: Address, epoch: u32) -> Result<i128, Error> {
+    pub fn claim_epoch_reward(env: Env, player: Address, epoch: u32) -> Result<i128, Error> {
         storage::require_not_paused(&env)?;
-        rewards::claim_epoch_reward(&env, &user, epoch)
+        rewards::claim_epoch_reward(&env, &player, epoch)
     }
-
 }
 
 // ============================================================================

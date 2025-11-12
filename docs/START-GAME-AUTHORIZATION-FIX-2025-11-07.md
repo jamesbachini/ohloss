@@ -53,8 +53,8 @@ MaliciousContract.attack() {
 
 **2. Session Spam** 📨
 - Create unlimited fake sessions
-- Lock up users' FP
-- Griefing attack (users' FP stuck in invalid sessions)
+- Lock up players' FP
+- Griefing attack (players' FP stuck in invalid sessions)
 - Storage bloat (fake sessions stored on-chain)
 
 **3. Bypass Game Logic** ⚠️
@@ -387,7 +387,7 @@ pub(crate) fn end_game(...) {
 
 **Consistent Pattern**: Both lifecycle methods require game authorization ✅
 
-## User Question That Led to This Fix
+## Player Question That Led to This Fix
 
 > "Should we be game_id.require_auth in the start_game like we do in the end_game? Seems smart?"
 
@@ -534,9 +534,9 @@ Successfully added `game_id.require_auth()` to `start_game()`:
 **Related Documents:**
 - `GAMESESSION-FACTION-REMOVAL-2025-11-07.md` - GameSession optimization
 - `EPOCH-DATA-DEFAULTS-2025-11-07.md` - Epoch data handling
-- `USER-QUERY-ERROR-HANDLING-2025-11-07.md` - User query errors
+- `USER-QUERY-ERROR-HANDLING-2025-11-07.md` - Player query errors
 
 **Security Principle**:
 Symmetric authorization - if one end of a lifecycle requires authorization, the other end should too. This creates a consistent, predictable security model and prevents asymmetric attack vectors.
 
-**Credit**: User identified this security issue with excellent question: "Should we be game_id.require_auth in the start_game like we do in the end_game?"
+**Credit**: Player identified this security issue with excellent question: "Should we be game_id.require_auth in the start_game like we do in the end_game?"

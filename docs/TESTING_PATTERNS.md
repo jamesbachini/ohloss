@@ -129,13 +129,13 @@ fn test_fee_vault_integration() {
     let setup = setup_full();
 
     // 1. Arrange
-    let user = Address::generate(&setup.env);
-    setup.usdc_client.mint(&user, &1000_0000000);
+    let player = Address::generate(&setup.env);
+    setup.usdc_client.mint(&player, &1000_0000000);
 
     // 2. Act
-    setup.contract.deposit(&user, &100_0000000);
+    setup.contract.deposit(&player, &100_0000000);
     setup.env.jump_time(86400); // Jump 1 day
-    let yield_amount = setup.contract.claim_yield(&user, &epoch);
+    let yield_amount = setup.contract.claim_yield(&player, &epoch);
 
     // 3. Assert
     assert!(yield_amount > 0);
@@ -232,7 +232,7 @@ pub fn add_liquidity(
     token_b: &Address,
     amount_a: i128,
     amount_b: i128,
-    user: &Address,
+    player: &Address,
 ) -> (i128, i128, i128) {
     router.add_liquidity(
         token_a,
@@ -241,7 +241,7 @@ pub fn add_liquidity(
         &amount_b,
         &0, // min_a
         &0, // min_b
-        user,
+        player,
         &(env.ledger().timestamp() + 1000), // deadline
     )
 }
@@ -253,13 +253,13 @@ pub fn swap_exact_tokens(
     router: &SoroswapRouterClient,
     path: &Vec<Address>,
     amount_in: i128,
-    user: &Address,
+    player: &Address,
 ) -> Vec<i128> {
     router.swap_exact_tokens_for_tokens(
         &amount_in,
         &0, // min_out
         path,
-        user,
+        player,
         &(env.ledger().timestamp() + 1000), // deadline
     )
 }
@@ -267,7 +267,7 @@ pub fn swap_exact_tokens(
 
 ### Fee Vault: Deposit
 ```rust
-let shares = fee_vault.deposit(&user, &amount);
+let shares = fee_vault.deposit(&player, &amount);
 ```
 
 ### Fee Vault: Admin Withdraw (for converting to USDC)
@@ -294,10 +294,10 @@ When implementing fee-vault and soroswap integration:
 ## Key Learnings from Implementation
 
 ### Token Minting is Critical
-Always mint tokens to users before they attempt to add liquidity or make swaps:
+Always mint tokens to players before they attempt to add liquidity or make swaps:
 ```rust
-setup.token_0.mint(&user, &10_000_000_0000000);
-setup.token_1.mint(&user, &10_000_000_0000000);
+setup.token_0.mint(&player, &10_000_000_0000000);
+setup.token_1.mint(&player, &10_000_000_0000000);
 ```
 
 ### Budget Management
@@ -335,7 +335,7 @@ impl MockPool {
 
 ## Resources
 
-- **blend-together**: `/Users/kalepail/Desktop/blend-together/contracts/hello_world/src/test/`
-- **fee-vault-v2**: `/Users/kalepail/Desktop/Web/Soroban/fee-vault-v2/src/tests/`
-- **soroswap**: `/Users/kalepail/Desktop/Web/Soroban/soroswap/core/contracts/*/src/test/`
+- **blend-together**: `/Players/kalepail/Desktop/blend-together/contracts/hello_world/src/test/`
+- **fee-vault-v2**: `/Players/kalepail/Desktop/Web/Soroban/fee-vault-v2/src/tests/`
+- **soroswap**: `/Players/kalepail/Desktop/Web/Soroban/soroswap/core/contracts/*/src/test/`
 - **Stellar Docs**: https://developers.stellar.org/docs/build/smart-contracts/

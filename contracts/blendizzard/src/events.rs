@@ -32,11 +32,11 @@ pub struct ConfigUpdated {
 }
 
 // ============================================================================
-// Vault Events (REMOVED - Users interact directly with fee-vault-v2)
+// Vault Events (REMOVED - Players interact directly with fee-vault-v2)
 // ============================================================================
 //
 // Deposit and Withdraw events have been removed because:
-// - Users deposit/withdraw directly to fee-vault-v2
+// - Players deposit/withdraw directly to fee-vault-v2
 // - Blendizzard no longer intermediates vault operations
 // - Fee-vault-v2 emits its own events for these operations
 //
@@ -49,14 +49,14 @@ pub struct ConfigUpdated {
 #[contractevent]
 pub struct FactionSelected {
     #[topic]
-    pub user: Address,
+    pub player: Address,
     pub faction: u32,
 }
 
 #[contractevent]
 pub struct FactionLocked {
     #[topic]
-    pub user: Address,
+    pub player: Address,
     pub epoch: u32,
     pub faction: u32,
 }
@@ -103,7 +103,7 @@ pub struct EpochCycled {
 #[contractevent]
 pub struct RewardsClaimed {
     #[topic]
-    pub user: Address,
+    pub player: Address,
     pub epoch: u32,
     pub faction: u32,
     pub amount: i128,
@@ -147,18 +147,18 @@ pub(crate) fn emit_config_updated(env: &Env, admin: &Address) {
 }
 
 /// Emit faction selected event
-pub(crate) fn emit_faction_selected(env: &Env, user: &Address, faction: u32) {
+pub(crate) fn emit_faction_selected(env: &Env, player: &Address, faction: u32) {
     FactionSelected {
-        user: user.clone(),
+        player: player.clone(),
         faction,
     }
     .publish(env);
 }
 
 /// Emit faction locked event (for epoch)
-pub(crate) fn emit_faction_locked(env: &Env, user: &Address, epoch: u32, faction: u32) {
+pub(crate) fn emit_faction_locked(env: &Env, player: &Address, epoch: u32, faction: u32) {
     FactionLocked {
-        user: user.clone(),
+        player: player.clone(),
         epoch,
         faction,
     }
@@ -225,13 +225,13 @@ pub(crate) fn emit_epoch_cycled(
 /// Emit rewards claimed event
 pub(crate) fn emit_rewards_claimed(
     env: &Env,
-    user: &Address,
+    player: &Address,
     epoch: u32,
     faction: u32,
     amount: i128,
 ) {
     RewardsClaimed {
-        user: user.clone(),
+        player: player.clone(),
         epoch,
         faction,
         amount,

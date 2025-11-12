@@ -13,7 +13,7 @@
  * See CHITSHEET.md for contract addresses.
  */
 
-import { Client as BlendizzardContract, type User, type EpochUser } from 'blendizzard';
+import { Client as BlendizzardContract, type Player, type EpochUser } from 'blendizzard';
 import { Client as FeeVaultContract } from 'fee-vault';
 import { Client as NumberGuessContract } from 'number-guess';
 import { Keypair, Networks, Transaction, BASE_FEE, contract, rpc } from '@stellar/stellar-sdk';
@@ -194,7 +194,7 @@ async function main() {
 
   // await logTx(
   //   feeVault1.deposit({
-  //     user: player1.publicKey(),
+  //     player: player1.publicKey(),
   //     amount: depositAmount,
   //   }, DEFAULT_METHOD_OPTIONS),
   //   `Player 1 deposits ${formatAmount(depositAmount)} USDC`
@@ -202,7 +202,7 @@ async function main() {
 
   // await logTx(
   //   feeVault2.deposit({
-  //     user: player2.publicKey(),
+  //     player: player2.publicKey(),
   //     amount: depositAmount,
   //   }, DEFAULT_METHOD_OPTIONS),
   //   `Player 2 deposits ${formatAmount(depositAmount)} USDC`
@@ -220,7 +220,7 @@ async function main() {
 
   // await logTx(
   //   blendizzard1.select_faction({
-  //     user: player1.publicKey(),
+  //     player: player1.publicKey(),
   //     faction: FACTION_WHOLE_NOODLE,
   //   }, DEFAULT_METHOD_OPTIONS),
   //   'Player 1 selects WholeNoodle faction'
@@ -228,7 +228,7 @@ async function main() {
 
   // await logTx(
   //   blendizzard2.select_faction({
-  //     user: player2.publicKey(),
+  //     player: player2.publicKey(),
   //     faction: FACTION_POINTY_STICK,
   //   }, DEFAULT_METHOD_OPTIONS),
   //   'Player 2 selects PointyStick faction'
@@ -241,12 +241,12 @@ async function main() {
   // console.log('\n\n📊 Step 3: Check Initial State');
   // console.log('-'.repeat(60));
 
-  // const player1Data = await queryContract<User>(
-  //   blendizzard1.get_player({ user: player1.publicKey() }, DEFAULT_METHOD_OPTIONS),
+  // const player1Data = await queryContract<Player>(
+  //   blendizzard1.get_player({ player: player1.publicKey() }, DEFAULT_METHOD_OPTIONS),
   //   'Get Player 1 data'
   // );
-  // const player2Data = await queryContract<User>(
-  //   blendizzard2.get_player({ user: player2.publicKey() }, DEFAULT_METHOD_OPTIONS),
+  // const player2Data = await queryContract<Player>(
+  //   blendizzard2.get_player({ player: player2.publicKey() }, DEFAULT_METHOD_OPTIONS),
   //   'Get Player 2 data'
   // );
 
@@ -267,11 +267,11 @@ async function main() {
 
   // First, query each player's available FP
   const p1EpochBefore = await queryContract<EpochUser>(
-    blendizzard1.get_epoch_player({ user: player1.publicKey() }, DEFAULT_METHOD_OPTIONS),
+    blendizzard1.get_epoch_player({ player: player1.publicKey() }, DEFAULT_METHOD_OPTIONS),
     'Get Player 1 epoch data'
   );
   const p2EpochBefore = await queryContract<EpochUser>(
-    blendizzard2.get_epoch_player({ user: player2.publicKey() }, DEFAULT_METHOD_OPTIONS),
+    blendizzard2.get_epoch_player({ player: player2.publicKey() }, DEFAULT_METHOD_OPTIONS),
     'Get Player 2 epoch data'
   );
 
@@ -302,11 +302,11 @@ async function main() {
 
   // // Check FP state after game start
   // const p1EpochAfter = await queryContract<EpochUser>(
-  //   blendizzard1.get_epoch_player({ user: player1.publicKey() }, DEFAULT_METHOD_OPTIONS),
+  //   blendizzard1.get_epoch_player({ player: player1.publicKey() }, DEFAULT_METHOD_OPTIONS),
   //   'Get Player 1 epoch data after game start'
   // );
   // const p2EpochAfter = await queryContract<EpochUser>(
-  //   blendizzard2.get_epoch_player({ user: player2.publicKey() }, DEFAULT_METHOD_OPTIONS),
+  //   blendizzard2.get_epoch_player({ player: player2.publicKey() }, DEFAULT_METHOD_OPTIONS),
   //   'Get Player 2 epoch data after game start'
   // );
 
@@ -380,11 +380,11 @@ async function main() {
   // console.log('-'.repeat(60));
 
   // const p1EpochAfter = await queryContract(
-  //   blendizzard1.get_epoch_player({ user: player1.publicKey() }, DEFAULT_METHOD_OPTIONS),
+  //   blendizzard1.get_epoch_player({ player: player1.publicKey() }, DEFAULT_METHOD_OPTIONS),
   //   'Get Player 1 final epoch data'
   // );
   // const p2EpochAfter = await queryContract(
-  //   blendizzard2.get_epoch_player({ user: player2.publicKey() }, DEFAULT_METHOD_OPTIONS),
+  //   blendizzard2.get_epoch_player({ player: player2.publicKey() }, DEFAULT_METHOD_OPTIONS),
   //   'Get Player 2 final epoch data'
   // );
 

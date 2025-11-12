@@ -27,15 +27,15 @@ fn test_initialization() {
 fn test_select_faction() {
     let env = setup_test_env();
     let admin = Address::generate(&env);
-    let user = Address::generate(&env);
+    let player = Address::generate(&env);
 
     let client = create_test_blendizzard(&env, &admin);
 
     // Select WholeNoodle faction (0)
-    client.select_faction(&user, &0);
+    client.select_faction(&player, &0);
 
     // Verify faction
-    let player_info = client.get_player(&user);
+    let player_info = client.get_player(&player);
     assert_eq!(player_info.selected_faction, 0);
 }
 
@@ -43,17 +43,17 @@ fn test_select_faction() {
 fn test_change_faction() {
     let env = setup_test_env();
     let admin = Address::generate(&env);
-    let user = Address::generate(&env);
+    let player = Address::generate(&env);
 
     let client = create_test_blendizzard(&env, &admin);
 
     // Select WholeNoodle (0)
-    client.select_faction(&user, &0);
+    client.select_faction(&player, &0);
 
     // Change to PointyStick (1)
-    client.select_faction(&user, &1);
+    client.select_faction(&player, &1);
 
-    let player_info = client.get_player(&user);
+    let player_info = client.get_player(&player);
     assert_eq!(player_info.selected_faction, 1);
 }
 
@@ -62,12 +62,12 @@ fn test_change_faction() {
 fn test_invalid_faction() {
     let env = setup_test_env();
     let admin = Address::generate(&env);
-    let user = Address::generate(&env);
+    let player = Address::generate(&env);
 
     let client = create_test_blendizzard(&env, &admin);
 
     // Try invalid faction ID - should panic
-    client.select_faction(&user, &99);
+    client.select_faction(&player, &99);
 }
 
 // ============================================================================
