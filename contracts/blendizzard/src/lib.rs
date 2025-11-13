@@ -327,40 +327,66 @@ impl Blendizzard {
         storage::get_player(&env, &player).ok_or(Error::PlayerNotFound)
     }
 
-    /// Get player's epoch-specific information for the current epoch
+    /// Get player's epoch-specific information for any epoch
     ///
-    /// Returns complete epoch-specific data including locked faction, available/locked FP,
-    /// total FP contributed, and balance snapshot.
+    /// Returns complete epoch-specific data including locked faction, available FP,
+    /// total FP contributed, and balance snapshot. Consistent with `get_epoch(epoch)`
+    /// which also requires an epoch parameter.
     ///
-    /// **NEW BEHAVIOR:** If player hasn't played any games this epoch yet, calculates
-    /// what their FP WOULD be based on current vault balance without writing to storage.
-    /// This allows UIs to display FP before the player's first game.
+    /// **Behavior for current epoch:** If player hasn't played any games this epoch yet,
+    /// calculates what their FP WOULD be based on current vault balance without writing
+    /// to storage. This allows UIs to display FP before the player's first game.
+    ///
+    /// **Behavior for historical epochs:** Only returns data if player participated in
+    /// that epoch (played at least one game).
+    ///
+    /// # Arguments
+    /// * `epoch` - Epoch number to query
+    /// * `player` - Player address
+    ///
+    /// # Examples
+    /// ```ignore
+    /// // Current epoch
+    /// let current = contract.get_current_epoch();
+    /// let player_data = contract.get_epoch_player(&current, &player)?;
+    ///
+    /// // Historical epoch
+    /// let epoch0_data = contract.get_epoch_player(&0, &player)?;
+    /// ```
     ///
     /// # Errors
-    /// * `FactionNotSelected` - If player hasn't selected a faction yet
-    pub fn get_epoch_player(env: Env, player: Address) -> Result<types::EpochPlayer, Error> {
-        let current_epoch = storage::get_current_epoch(&env);
-
-        // Try to get existing epoch player data
-        if let Some(epoch_player) = storage::get_epoch_player(&env, current_epoch, &player) {
+    /// * `FactionNotSelected` - If querying current epoch and player hasn't selected faction
+    /// * `PlayerNotFound` - If querying historical epoch and player didn't participate
+    pub fn get_epoch_player(
+        env: Env,
+        epoch: u32,
+        player: Address,
+    ) -> Result<types::EpochPlayer, Error> {
+        // Try to get existing epoch player data first
+        if let Some(epoch_player) = storage::get_epoch_player(&env, epoch, &player) {
             return Ok(epoch_player);
         }
 
-        // Player hasn't played this epoch yet - calculate FP on-the-fly
-        // First, check if player has selected a faction
-        storage::get_player(&env, &player).ok_or(Error::FactionNotSelected)?;
+        // If querying current epoch and no data exists yet, compute it on-the-fly
+        if epoch == storage::get_current_epoch(&env) {
+            // Check if player has selected a faction
+            storage::get_player(&env, &player).ok_or(Error::FactionNotSelected)?;
 
-        // Calculate FP using same logic as initialize_player_epoch
-        let total_fp = faction_points::calculate_faction_points(&env, &player)?;
-        let current_balance = vault::get_vault_balance(&env, &player);
+            // Calculate FP using same logic as initialize_player_epoch
+            let total_fp = faction_points::calculate_faction_points(&env, &player)?;
+            let current_balance = vault::get_vault_balance(&env, &player);
 
-        // Return computed EpochPlayer (not saved to storage yet)
-        Ok(types::EpochPlayer {
-            epoch_faction: None, // Faction not locked until first game
-            epoch_balance_snapshot: current_balance,
-            available_fp: total_fp,
-            total_fp_contributed: 0,
-        })
+            // Return computed EpochPlayer (not saved to storage yet)
+            Ok(types::EpochPlayer {
+                epoch_faction: None, // Faction not locked until first game
+                epoch_balance_snapshot: current_balance,
+                available_fp: total_fp,
+                total_fp_contributed: 0,
+            })
+        } else {
+            // For historical epochs, player must have participated
+            Err(Error::PlayerNotFound)
+        }
     }
 
     // ========================================================================
