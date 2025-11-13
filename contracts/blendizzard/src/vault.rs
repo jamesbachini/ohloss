@@ -1,3 +1,4 @@
+use soroban_fixed_point_math::FixedPoint;
 use soroban_sdk::{Address, Env};
 
 use crate::errors::Error;
@@ -68,14 +69,15 @@ pub(crate) fn check_cross_epoch_withdrawal_reset(
 
     // Calculate withdrawal percentage (as fixed-point with 7 decimals)
     // Formula: abs(net_change) / last_epoch_balance > 0.5
+    // SECURITY: Use fixed_div_ceil to round UP (more conservative, favors protocol)
+    // Example: 50.1% withdrawal rounds to ceiling → more likely to trigger reset
     let abs_withdrawal = -net_change;
-    let withdrawal_ratio = (abs_withdrawal * crate::types::SCALAR_7)
-        .checked_div(player_data.last_epoch_balance)
+    let withdrawal_ratio = abs_withdrawal
+        .fixed_div_ceil(player_data.last_epoch_balance, crate::types::SCALAR_7)
         .ok_or(Error::OverflowError)?;
 
-    // Check if > 50% (SCALAR_7 / 2 = 5_000_000)
-    let threshold = crate::types::SCALAR_7 / 2;
-    let reset = withdrawal_ratio > threshold;
+    // Check if > 50% (use constant for efficiency)
+    let reset = withdrawal_ratio > crate::types::WITHDRAWAL_RESET_THRESHOLD;
 
     if reset {
         // Reset time multiplier start to now
