@@ -68,8 +68,6 @@ impl Blendizzard {
     /// * `epoch_duration` - Duration of each epoch in seconds (default: 345,600 = 4 days)
     /// * `reserve_token_ids` - Reserve token IDs for claiming BLND emissions (e.g., vec![&env, 1] for reserve 0 b-tokens)
     ///
-    /// # Errors
-    /// * `AlreadyInitialized` - If contract has already been initialized
     pub fn __constructor(
         env: Env,
         admin: Address,
@@ -79,12 +77,7 @@ impl Blendizzard {
         usdc_token: Address,
         epoch_duration: u64,
         reserve_token_ids: Vec<u32>,
-    ) -> Result<(), Error> {
-        // Check if already initialized
-        if storage::is_initialized(&env) {
-            return Err(Error::AlreadyInitialized);
-        }
-
+    ) {
         // Create config (admin and pause state stored separately)
         let config = Config {
             fee_vault,
@@ -105,8 +98,6 @@ impl Blendizzard {
 
         // Initialize first epoch
         epoch::initialize_first_epoch(&env, epoch_duration);
-
-        Ok(())
     }
 
     // ========================================================================

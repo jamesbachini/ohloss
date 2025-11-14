@@ -5,7 +5,7 @@ use crate::events::{emit_game_ended, emit_game_started};
 use crate::faction::lock_epoch_faction;
 use crate::faction_points::{initialize_epoch_fp, lock_fp};
 use crate::storage;
-use crate::types::{GameSession, GameStatus};
+use crate::types::GameSession;
 
 // ============================================================================
 // Game Registry
@@ -160,9 +160,7 @@ pub(crate) fn start_game(
         player2: player2.clone(),
         player1_wager,
         player2_wager,
-        status: GameStatus::Pending,
         player1_won: None,
-        created_at: env.ledger().timestamp(),
     };
 
     // Save session
@@ -205,8 +203,8 @@ pub(crate) fn end_game(env: &Env, session_id: u32, player1_won: bool) -> Result<
     // Only the whitelisted game contract should be able to submit outcomes
     session.game_id.require_auth();
 
-    // Validate session state
-    if session.status != GameStatus::Pending {
+    // Validate session state (game must not be completed yet)
+    if session.player1_won.is_some() {
         return Err(Error::InvalidSessionState);
     }
 
@@ -254,8 +252,7 @@ pub(crate) fn end_game(env: &Env, session_id: u32, player1_won: bool) -> Result<
     // Save winner's updated data
     storage::set_epoch_player(env, current_epoch, winner, &winner_epoch);
 
-    // Update session
-    session.status = GameStatus::Completed;
+    // Update session (marking it as completed)
     session.player1_won = Some(player1_won);
     storage::set_session(env, session_id, &session);
 

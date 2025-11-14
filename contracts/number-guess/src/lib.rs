@@ -39,11 +39,10 @@ pub trait Blendizzard {
 #[repr(u32)]
 pub enum Error {
     GameNotFound = 1,
-    NotPlayer = 3,
-    AlreadyGuessed = 4,
-    BothPlayersNotGuessed = 5,
-    GameAlreadyEnded = 6,
-    NotInitialized = 7,
+    NotPlayer = 2,
+    AlreadyGuessed = 3,
+    BothPlayersNotGuessed = 4,
+    GameAlreadyEnded = 5,
 }
 
 // ============================================================================
@@ -107,11 +106,6 @@ impl NumberGuessContract {
     /// * `admin` - Admin address (can upgrade contract)
     /// * `blendizzard` - Address of the Blendizzard contract
     pub fn __constructor(env: Env, admin: Address, blendizzard: Address) {
-        // Check not already initialized
-        if env.storage().instance().has(&DataKey::BlendizzardAddress) {
-            panic!("Already initialized");
-        }
-
         // Store admin and Blendizzard address
         env.storage().instance().set(&DataKey::Admin, &admin);
         env.storage()
@@ -148,7 +142,7 @@ impl NumberGuessContract {
             .storage()
             .instance()
             .get(&DataKey::BlendizzardAddress)
-            .ok_or(Error::NotInitialized)?;
+            .expect("Blendizzard address not set");
 
         // Create Blendizzard client
         let blendizzard = BlendizzardClient::new(&env, &blendizzard_addr);
@@ -302,7 +296,7 @@ impl NumberGuessContract {
             .storage()
             .instance()
             .get(&DataKey::BlendizzardAddress)
-            .ok_or(Error::NotInitialized)?;
+            .expect("Blendizzard address not set");
 
         // Create Blendizzard client
         let blendizzard = BlendizzardClient::new(&env, &blendizzard_addr);
@@ -339,84 +333,69 @@ impl NumberGuessContract {
     ///
     /// # Returns
     /// * `Address` - The admin address
-    pub fn get_admin(env: Env) -> Result<Address, Error> {
+    pub fn get_admin(env: Env) -> Address {
         env.storage()
             .instance()
             .get(&DataKey::Admin)
-            .ok_or(Error::NotInitialized)
+            .expect("Admin not set")
     }
 
     /// Set a new admin address
     ///
     /// # Arguments
     /// * `new_admin` - The new admin address
-    ///
-    /// # Errors
-    /// * `NotAdmin` - If caller is not the current admin
-    pub fn set_admin(env: Env, new_admin: Address) -> Result<(), Error> {
+    pub fn set_admin(env: Env, new_admin: Address) {
         let admin: Address = env
             .storage()
             .instance()
             .get(&DataKey::Admin)
-            .ok_or(Error::NotInitialized)?;
+            .expect("Admin not set");
         admin.require_auth();
 
         env.storage().instance().set(&DataKey::Admin, &new_admin);
-
-        Ok(())
     }
 
     /// Get the current Blendizzard contract address
     ///
     /// # Returns
     /// * `Address` - The Blendizzard contract address
-    pub fn get_blendizzard(env: Env) -> Result<Address, Error> {
+    pub fn get_blendizzard(env: Env) -> Address {
         env.storage()
             .instance()
             .get(&DataKey::BlendizzardAddress)
-            .ok_or(Error::NotInitialized)
+            .expect("Blendizzard address not set")
     }
 
     /// Set a new Blendizzard contract address
     ///
     /// # Arguments
     /// * `new_blendizzard` - The new Blendizzard contract address
-    ///
-    /// # Errors
-    /// * `NotAdmin` - If caller is not the admin
-    pub fn set_blendizzard(env: Env, new_blendizzard: Address) -> Result<(), Error> {
+    pub fn set_blendizzard(env: Env, new_blendizzard: Address) {
         let admin: Address = env
             .storage()
             .instance()
             .get(&DataKey::Admin)
-            .ok_or(Error::NotInitialized)?;
+            .expect("Admin not set");
         admin.require_auth();
 
         env.storage()
             .instance()
             .set(&DataKey::BlendizzardAddress, &new_blendizzard);
-
-        Ok(())
     }
 
     /// Update the contract WASM hash (upgrade contract)
     ///
     /// # Arguments
     /// * `new_wasm_hash` - The hash of the new WASM binary
-    ///
-    /// # Errors
-    /// * `NotAdmin` - If caller is not the admin
-    pub fn upgrade(env: Env, new_wasm_hash: BytesN<32>) -> Result<(), Error> {
+    pub fn upgrade(env: Env, new_wasm_hash: BytesN<32>) {
         let admin: Address = env
             .storage()
             .instance()
             .get(&DataKey::Admin)
-            .ok_or(Error::NotInitialized)?;
+            .expect("Admin not set");
         admin.require_auth();
 
         env.deployer().update_current_contract_wasm(new_wasm_hash);
-
-        Ok(())
     }
 }
 

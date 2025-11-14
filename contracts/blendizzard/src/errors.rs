@@ -11,8 +11,7 @@ pub enum Error {
     // ========================================================================
     // Admin errors (1-9)
     // ========================================================================
-    /// Contract has already been initialized
-    AlreadyInitialized = 2,
+    // (No admin errors currently defined)
 
     // ========================================================================
     // Player errors (10-19)

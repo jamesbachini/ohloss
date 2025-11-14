@@ -50,11 +50,6 @@ pub enum DataKey {
 // Storage Utilities
 // ============================================================================
 
-/// Check if the contract has been initialized
-pub(crate) fn is_initialized(env: &Env) -> bool {
-    env.storage().instance().has(&DataKey::Config)
-}
-
 /// Get the admin address
 pub(crate) fn get_admin(env: &Env) -> Address {
     env.storage()

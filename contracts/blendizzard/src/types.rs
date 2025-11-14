@@ -120,29 +120,9 @@ pub struct GameSession {
     /// Faction points wagered by player2
     pub player2_wager: i128,
 
-    /// Current status of the game
-    pub status: GameStatus,
-
-    /// Winner of the game (None until completed)
+    /// Winner of the game (None = pending, Some = completed)
     /// true = player1 won, false = player2 won
     pub player1_won: Option<bool>,
-
-    /// Timestamp when game was created
-    pub created_at: u64,
-}
-
-/// Game session status
-#[contracttype]
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub enum GameStatus {
-    /// Game has started but not yet completed
-    Pending,
-
-    /// Game has completed with a verified outcome
-    Completed,
-
-    /// Game was cancelled (e.g., timeout)
-    Cancelled,
 }
 
 // ============================================================================
