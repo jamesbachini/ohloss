@@ -1,4 +1,4 @@
-use super::testutils::{create_test_blendizzard, setup_test_env};
+use super::testutils::{assert_contract_error, create_test_blendizzard, setup_test_env, Error};
 use soroban_sdk::testutils::Address as _;
 use soroban_sdk::Address;
 
@@ -58,7 +58,6 @@ fn test_change_faction() {
 }
 
 #[test]
-#[should_panic]
 fn test_invalid_faction() {
     let env = setup_test_env();
     let admin = Address::generate(&env);
@@ -66,8 +65,10 @@ fn test_invalid_faction() {
 
     let client = create_test_blendizzard(&env, &admin);
 
-    // Try invalid faction ID - should panic
-    client.select_faction(&player, &99);
+    // Try invalid faction ID (valid values are 0, 1, 2)
+    let result = client.try_select_faction(&player, &99);
+
+    assert_contract_error(&result, Error::InvalidFaction);
 }
 
 // ============================================================================

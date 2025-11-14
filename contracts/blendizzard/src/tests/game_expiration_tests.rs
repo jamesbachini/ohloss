@@ -6,7 +6,7 @@
 ///
 /// Key invariant: session.epoch_id must match current epoch at end_game
 use super::fee_vault_utils::{create_mock_vault, MockVaultClient};
-use super::testutils::{create_blendizzard_contract, setup_test_env};
+use super::testutils::{assert_contract_error, create_blendizzard_contract, setup_test_env, Error};
 use crate::BlendizzardClient;
 use soroban_sdk::testutils::{Address as _, Ledger};
 use soroban_sdk::{vec, Address, Env};
@@ -89,7 +89,6 @@ fn setup_expiration_test_env<'a>(
 /// 2. Waiting to see next epoch conditions
 /// 3. Only completing favorable games
 #[test]
-#[should_panic(expected = "Error(Contract, #25)")]
 fn test_game_from_previous_epoch_cannot_complete() {
     let env = setup_test_env();
     let (game_contract, _vault_addr, mock_vault, blendizzard) = setup_expiration_test_env(&env);
@@ -128,8 +127,10 @@ fn test_game_from_previous_epoch_cannot_complete() {
         .with_mut(|li| li.timestamp = epoch_start + 345_600);
     blendizzard.cycle_epoch();
 
-    // Try to end the game in epoch 1 - should panic with GameExpired error (#26)
-    blendizzard.end_game(&1, &true);
+    // Try to end the game in epoch 1 - should fail with GameExpired error
+    let result = blendizzard.try_end_game(&1, &true);
+
+    assert_contract_error(&result, Error::GameExpired);
 }
 
 /// Test that games expire on epoch cycle

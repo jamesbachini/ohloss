@@ -10,7 +10,7 @@
 /// These tests use MockVault (simple, no complex Blend setup) to verify
 /// the game flow without external dependencies.
 use super::fee_vault_utils::{create_mock_vault, MockVaultClient};
-use super::testutils::{create_blendizzard_contract, setup_test_env};
+use super::testutils::{assert_contract_error, create_blendizzard_contract, setup_test_env, Error};
 use crate::BlendizzardClient;
 use soroban_sdk::testutils::{Address as _, Ledger};
 use soroban_sdk::{vec, Address, Env};
@@ -403,7 +403,6 @@ fn test_fp_calculation_with_time_multiplier() {
 }
 
 #[test]
-#[should_panic(expected = "Error(Contract, #16)")]
 fn test_start_game_without_faction_selection() {
     let env = setup_test_env();
     let (_admin, game_contract, _vault_addr, mock_vault, blendizzard) = setup_game_test_env(&env);
@@ -420,9 +419,9 @@ fn test_start_game_without_faction_selection() {
     // Player1 selects a faction, but player2 does NOT
     blendizzard.select_faction(&player1, &0); // WholeNoodle
 
-    // Attempt to start a game - should panic with FactionNotSelected error (#16)
+    // Attempt to start a game - should fail with FactionNotSelected error
     let session_id = 1u32;
-    blendizzard.start_game(
+    let result = blendizzard.try_start_game(
         &game_contract,
         &session_id,
         &player1,
@@ -430,4 +429,6 @@ fn test_start_game_without_faction_selection() {
         &100_0000000, // 100 FP wager
         &50_0000000,  // 50 FP wager
     );
+
+    assert_contract_error(&result, Error::FactionNotSelected);
 }

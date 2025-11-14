@@ -9,7 +9,10 @@
 ///
 /// This demonstrates the full game integration flow with a real contract.
 use super::fee_vault_utils::{create_mock_vault, MockVaultClient};
-use super::testutils::{create_blendizzard_contract, setup_test_env};
+use super::testutils::{
+    assert_contract_error, assert_number_guess_error, create_blendizzard_contract, setup_test_env,
+    Error, NumberGuessError,
+};
 use crate::BlendizzardClient;
 use number_guess::{NumberGuessContract, NumberGuessContractClient};
 use soroban_sdk::testutils::Address as _;
@@ -207,7 +210,6 @@ fn test_multiple_number_guess_games() {
 }
 
 #[test]
-#[should_panic(expected = "Error(Contract, #20)")] // GameNotWhitelisted error
 fn test_cannot_use_unregistered_game() {
     let env = setup_test_env();
     let (_admin, _number_guess_addr, _number_guess_client, mock_vault, blendizzard) =
@@ -228,8 +230,8 @@ fn test_cannot_use_unregistered_game() {
     let fake_game = Address::generate(&env);
     let session_id = 1u32;
 
-    // This should panic because fake_game is not whitelisted
-    blendizzard.start_game(
+    // This should fail because fake_game is not whitelisted
+    let result = blendizzard.try_start_game(
         &fake_game,
         &session_id,
         &player1,
@@ -237,6 +239,8 @@ fn test_cannot_use_unregistered_game() {
         &100_0000000,
         &100_0000000,
     );
+
+    assert_contract_error(&result, Error::GameNotWhitelisted);
 }
 
 #[test]
@@ -412,7 +416,6 @@ fn test_asymmetric_wagers() {
 // ============================================================================
 
 #[test]
-#[should_panic(expected = "Error(Contract, #4)")] // AlreadyGuessed error
 fn test_player_cannot_guess_twice() {
     let env = setup_test_env();
     let (_admin, _number_guess_addr, number_guess_client, mock_vault, blendizzard) =
@@ -433,12 +436,12 @@ fn test_player_cannot_guess_twice() {
     // Player1 makes first guess
     number_guess_client.make_guess(&session_id, &player1, &5);
 
-    // Player1 tries to guess again - should panic
-    number_guess_client.make_guess(&session_id, &player1, &7);
+    // Player1 tries to guess again - should fail with AlreadyGuessed error
+    let result = number_guess_client.try_make_guess(&session_id, &player1, &7);
+    assert_number_guess_error(&result, NumberGuessError::AlreadyGuessed);
 }
 
 #[test]
-#[should_panic(expected = "Error(Contract, #5)")] // BothPlayersNotGuessed error
 fn test_cannot_reveal_before_both_guess() {
     let env = setup_test_env();
     let (_admin, _number_guess_addr, number_guess_client, mock_vault, blendizzard) =
@@ -459,8 +462,9 @@ fn test_cannot_reveal_before_both_guess() {
     // Only player1 guesses
     number_guess_client.make_guess(&session_id, &player1, &5);
 
-    // Try to reveal before player2 guesses - should panic
-    number_guess_client.reveal_winner(&session_id);
+    // Try to reveal before player2 guesses - should fail with BothPlayersNotGuessed error
+    let result = number_guess_client.try_reveal_winner(&session_id);
+    assert_number_guess_error(&result, NumberGuessError::BothPlayersNotGuessed);
 }
 
 #[test]

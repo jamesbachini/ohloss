@@ -2,6 +2,12 @@ use crate::{Blendizzard, BlendizzardClient};
 use soroban_sdk::testutils::{Address as _, Ledger as _};
 use soroban_sdk::{vec, Address, Env, Vec};
 
+// Re-export Error for test usage
+pub use crate::errors::Error;
+
+// Re-export number_guess Error as NumberGuessError to avoid conflicts
+pub use number_guess::Error as NumberGuessError;
+
 /// Register and initialize the Blendizzard contract
 pub fn create_blendizzard_contract<'a>(
     env: &Env,
@@ -160,4 +166,111 @@ pub fn setup_test_env() -> Env {
     env.cost_estimate().budget().reset_unlimited();
 
     env
+}
+
+// ============================================================================
+// Error Testing Utilities
+// ============================================================================
+
+/// Assert that a Result contains a specific contract error
+///
+/// This helper provides type-safe error assertions following Stellar/Soroban best practices.
+/// Instead of using numeric error codes or #[should_panic], this pattern:
+/// - Provides compile-time error checking
+/// - Makes tests more readable with named errors
+/// - Gives better failure messages
+///
+/// # Example
+/// ```
+/// let result = blendizzard.try_start_game(...);
+/// assert_contract_error(&result, Error::InsufficientFactionPoints);
+/// ```
+///
+/// # Type Signature
+/// The try_ methods return: `Result<Result<T, T::Error>, Result<E, InvokeError>>`
+/// - Ok(Ok(value)): Call succeeded, decode succeeded
+/// - Ok(Err(conv_err)): Call succeeded, decode failed
+/// - Err(Ok(error)): Contract reverted with custom error (THIS IS WHAT WE TEST)
+/// - Err(Err(invoke_err)): Low-level invocation failure
+///
+/// # Pattern Reference
+/// Based on error testing patterns from:
+/// - soroswap/core: Uses Err(Ok(ErrorType::SpecificError))
+/// - fee-vault-v2: Uses try_ methods with error code assertions
+/// - blend-contracts-v2: Uses #[should_panic] with error codes
+/// - stellar/soroban-examples: Uses try_ methods with error enums
+pub fn assert_contract_error<T, E>(
+    result: &Result<Result<T, E>, Result<Error, soroban_sdk::InvokeError>>,
+    expected_error: Error,
+) {
+    match result {
+        Err(Ok(actual_error)) => {
+            assert_eq!(
+                *actual_error, expected_error,
+                "Expected error {:?} (code {}), but got {:?} (code {})",
+                expected_error, expected_error as u32, actual_error, *actual_error as u32
+            );
+        }
+        Err(Err(_invoke_error)) => {
+            panic!(
+                "Expected contract error {:?} (code {}), but got invocation error",
+                expected_error, expected_error as u32
+            );
+        }
+        Ok(Err(_conv_error)) => {
+            panic!(
+                "Expected contract error {:?} (code {}), but got conversion error",
+                expected_error, expected_error as u32
+            );
+        }
+        Ok(Ok(_)) => {
+            panic!(
+                "Expected error {:?} (code {}), but operation succeeded",
+                expected_error, expected_error as u32
+            );
+        }
+    }
+}
+
+/// Assert that a Result contains a specific number_guess contract error
+///
+/// This helper provides type-safe error assertions for the number_guess contract,
+/// following the same pattern as assert_contract_error() for Blendizzard errors.
+///
+/// # Example
+/// ```
+/// let result = number_guess.try_guess(&player, &game_id, &42);
+/// assert_number_guess_error(&result, NumberGuessError::AlreadyGuessed);
+/// ```
+pub fn assert_number_guess_error<T, E>(
+    result: &Result<Result<T, E>, Result<NumberGuessError, soroban_sdk::InvokeError>>,
+    expected_error: NumberGuessError,
+) {
+    match result {
+        Err(Ok(actual_error)) => {
+            assert_eq!(
+                *actual_error, expected_error,
+                "Expected number_guess error {:?} (code {}), but got {:?} (code {})",
+                expected_error, expected_error as u32, actual_error, *actual_error as u32
+            );
+        }
+        Err(Err(_invoke_error)) => {
+            panic!(
+                "Expected number_guess error {:?} (code {}), but got invocation error",
+                expected_error, expected_error as u32
+            );
+        }
+        Ok(Err(_conv_error)) => {
+            panic!(
+                "Expected number_guess error {:?} (code {}), but got conversion error",
+                expected_error, expected_error as u32
+            );
+        }
+        Ok(Ok(_)) => {
+            panic!(
+                "Expected number_guess error {:?} (code {}), but operation succeeded",
+                expected_error, expected_error as u32
+            );
+        }
+    }
 }

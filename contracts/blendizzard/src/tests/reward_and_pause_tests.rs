@@ -6,7 +6,7 @@
 /// - Error paths (invalid inputs, unauthorized calls)
 /// - Cross-epoch scenarios
 use super::fee_vault_utils::{create_mock_vault, MockVaultClient};
-use super::testutils::{create_blendizzard_contract, setup_test_env};
+use super::testutils::{assert_contract_error, create_blendizzard_contract, setup_test_env, Error};
 use crate::BlendizzardClient;
 use sep_41_token::testutils::MockTokenClient;
 use soroban_sdk::testutils::Address as _;
@@ -100,7 +100,7 @@ fn test_pause_blocks_start_game() {
         &100_0000000,
         &50_0000000,
     );
-    assert!(result.is_err(), "start_game should fail when paused");
+    assert_contract_error(&result, Error::ContractPaused);
 }
 
 #[test]
@@ -115,10 +115,7 @@ fn test_pause_blocks_claim_epoch_reward() {
 
     // claim_epoch_reward should fail when paused
     let result = blendizzard.try_claim_epoch_reward(&player, &0);
-    assert!(
-        result.is_err(),
-        "claim_epoch_reward should fail when paused"
-    );
+    assert_contract_error(&result, Error::ContractPaused);
 }
 
 #[test]
@@ -162,10 +159,7 @@ fn test_claim_epoch_reward_before_epoch_finalized() {
 
     // Try to claim from epoch 0 before it's finalized
     let result = blendizzard.try_claim_epoch_reward(&player, &0);
-    assert!(
-        result.is_err(),
-        "Should fail to claim from unfinalized epoch"
-    );
+    assert_contract_error(&result, Error::EpochNotFinalized);
 }
 
 // ============================================================================
@@ -189,7 +183,7 @@ fn test_start_game_with_zero_wager() {
     // Try to start game with 0 wager (should fail)
     let session = 10u32;
     let result = blendizzard.try_start_game(&game, &session, &player1, &player2, &0, &100_0000000);
-    assert!(result.is_err(), "Should fail with zero wager");
+    assert_contract_error(&result, Error::InvalidAmount);
 }
 
 #[test]
@@ -207,17 +201,19 @@ fn test_start_game_with_insufficient_fp() {
     blendizzard.select_faction(&player1, &0);
     blendizzard.select_faction(&player2, &1);
 
-    // Try to wager more than they have (with multipliers, they'll have ~11-12 FP)
+    // With BASE_FP_PER_USDC = 100:
+    // 10 USDC × 100 × amount_mult × time_mult ≈ 1,000 FP (with min multipliers)
+    // Try to wager more than they have
     let session = 11u32;
     let result = blendizzard.try_start_game(
         &game,
         &session,
         &player1,
         &player2,
-        &1000_0000000,
+        &100000_0000000, // 100,000 FP (way more than ~1,000 FP available)
         &10_0000000,
     );
-    assert!(result.is_err(), "Should fail with insufficient FP");
+    assert_contract_error(&result, Error::InsufficientFactionPoints);
 }
 
 #[test]
@@ -254,7 +250,7 @@ fn test_start_game_duplicate_session_id() {
         &100_0000000,
         &50_0000000,
     );
-    assert!(result.is_err(), "Should fail with duplicate session ID");
+    assert_contract_error(&result, Error::SessionAlreadyExists);
 }
 
 #[test]
@@ -269,7 +265,7 @@ fn test_end_game_nonexistent_session() {
     let session = 13u32;
 
     let result = blendizzard.try_end_game(&session, &true);
-    assert!(result.is_err(), "Should fail with nonexistent session");
+    assert_contract_error(&result, Error::SessionNotFound);
 }
 
 #[test]
@@ -281,11 +277,11 @@ fn test_select_invalid_faction() {
 
     // Try to select faction 3 (only 0, 1, 2 are valid)
     let result = blendizzard.try_select_faction(&player, &3);
-    assert!(result.is_err(), "Should fail with invalid faction ID");
+    assert_contract_error(&result, Error::InvalidFaction);
 
     // Try faction 99
     let result = blendizzard.try_select_faction(&player, &99);
-    assert!(result.is_err(), "Should fail with invalid faction ID");
+    assert_contract_error(&result, Error::InvalidFaction);
 }
 
 // ============================================================================
@@ -470,7 +466,7 @@ fn test_start_game_with_unwhitelisted_game() {
         &100_0000000,
         &50_0000000,
     );
-    assert!(result.is_err(), "Should fail with unwhitelisted game");
+    assert_contract_error(&result, Error::GameNotWhitelisted);
 }
 
 #[test]

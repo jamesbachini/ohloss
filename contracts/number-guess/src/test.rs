@@ -87,6 +87,59 @@ fn setup_test() -> (
     (env, client, blendizzard, player1, player2)
 }
 
+/// Assert that a Result contains a specific number_guess error
+///
+/// This helper provides type-safe error assertions following Stellar/Soroban best practices.
+/// Instead of using `assert_eq!(result, Err(Ok(Error::AlreadyGuessed)))`, this pattern:
+/// - Provides compile-time error checking
+/// - Makes tests more readable with named errors
+/// - Gives better failure messages
+///
+/// # Example
+/// ```
+/// let result = client.try_make_guess(&session_id, &player, &7);
+/// assert_number_guess_error(&result, Error::AlreadyGuessed);
+/// ```
+///
+/// # Type Signature
+/// The try_ methods return: `Result<Result<T, T::Error>, Result<E, InvokeError>>`
+/// - Ok(Ok(value)): Call succeeded, decode succeeded
+/// - Ok(Err(conv_err)): Call succeeded, decode failed
+/// - Err(Ok(error)): Contract reverted with custom error (THIS IS WHAT WE TEST)
+/// - Err(Err(invoke_err)): Low-level invocation failure
+fn assert_number_guess_error<T, E>(
+    result: &Result<Result<T, E>, Result<Error, soroban_sdk::InvokeError>>,
+    expected_error: Error,
+) {
+    match result {
+        Err(Ok(actual_error)) => {
+            assert_eq!(
+                *actual_error, expected_error,
+                "Expected error {:?} (code {}), but got {:?} (code {})",
+                expected_error, expected_error as u32, actual_error, *actual_error as u32
+            );
+        }
+        Err(Err(_invoke_error)) => {
+            panic!(
+                "Expected contract error {:?} (code {}), but got invocation error",
+                expected_error, expected_error as u32
+            );
+        }
+        Ok(Err(_conv_error)) => {
+            panic!(
+                "Expected contract error {:?} (code {}), but got conversion error",
+                expected_error, expected_error as u32
+            );
+        }
+        Ok(Ok(_)) => {
+            panic!(
+                "Expected error {:?} (code {}), but operation succeeded",
+                expected_error, expected_error as u32
+            );
+        }
+    }
+}
+
 // ============================================================================
 // Basic Game Flow Tests
 // ============================================================================
@@ -280,7 +333,7 @@ fn test_cannot_guess_twice() {
 
     // Try to guess again - should fail
     let result = client.try_make_guess(&session_id, &player1, &6);
-    assert_eq!(result, Err(Ok(Error::AlreadyGuessed)));
+    assert_number_guess_error(&result, Error::AlreadyGuessed);
 }
 
 #[test]
@@ -295,7 +348,7 @@ fn test_cannot_reveal_before_both_guesses() {
 
     // Try to reveal winner - should fail
     let result = client.try_reveal_winner(&session_id);
-    assert_eq!(result, Err(Ok(Error::BothPlayersNotGuessed)));
+    assert_number_guess_error(&result, Error::BothPlayersNotGuessed);
 }
 
 #[test]
@@ -344,7 +397,7 @@ fn test_non_player_cannot_guess() {
 
     // Non-player tries to guess
     let result = client.try_make_guess(&session_id, &non_player, &5);
-    assert_eq!(result, Err(Ok(Error::NotPlayer)));
+    assert_number_guess_error(&result, Error::NotPlayer);
 }
 
 #[test]
@@ -352,14 +405,33 @@ fn test_cannot_reveal_nonexistent_game() {
     let (_env, client, _blendizzard, _player1, _player2) = setup_test();
 
     let result = client.try_reveal_winner(&999);
-    assert_eq!(result, Err(Ok(Error::GameNotFound)));
+    assert_number_guess_error(&result, Error::GameNotFound);
+}
+
+#[test]
+fn test_cannot_guess_after_game_ended() {
+    let (_env, client, _blendizzard, player1, player2) = setup_test();
+
+    let session_id = 12u32;
+    client.start_game(&session_id, &player1, &player2, &100_0000000, &100_0000000);
+
+    // Both players make guesses
+    client.make_guess(&session_id, &player1, &5);
+    client.make_guess(&session_id, &player2, &7);
+
+    // Reveal winner - game ends
+    let _winner = client.reveal_winner(&session_id);
+
+    // Try to make another guess after game has ended - should fail
+    let result = client.try_make_guess(&session_id, &player1, &3);
+    assert_number_guess_error(&result, Error::GameAlreadyEnded);
 }
 
 #[test]
 fn test_cannot_reveal_twice() {
     let (_env, client, _blendizzard, player1, player2) = setup_test();
 
-    let session_id = 12u32;
+    let session_id = 14u32;
     client.start_game(&session_id, &player1, &player2, &100_0000000, &100_0000000);
 
     client.make_guess(&session_id, &player1, &5);
@@ -384,8 +456,8 @@ fn test_multiple_games_independent() {
     let player3 = Address::generate(&env);
     let player4 = Address::generate(&env);
 
-    let session1 = 13u32;
-    let session2 = 14u32;
+    let session1 = 20u32;
+    let session2 = 21u32;
 
     // Start two games
     client.start_game(&session1, &player1, &player2, &100_0000000, &100_0000000);

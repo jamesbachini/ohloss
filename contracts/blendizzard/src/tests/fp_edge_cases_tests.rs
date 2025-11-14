@@ -1,12 +1,13 @@
 /// Faction Points Edge Case Tests - HIGH PRIORITY
 ///
-/// FP formula: base × amount_mult × time_mult
-/// - amount_mult: asymptotic toward $1000 USD
-/// - time_mult: asymptotic toward 30 days
+/// FP formula: (base × 100) × amount_mult × time_mult
+/// Where: 1 USDC = 100 FP (before multipliers)
+/// - amount_mult: asymptotic toward $1000 USD (1.0x → 2.0x)
+/// - time_mult: asymptotic toward 30 days (1.0x → 2.0x)
 ///
 /// These tests verify edge cases and boundary conditions.
 use super::fee_vault_utils::{create_mock_vault, MockVaultClient};
-use super::testutils::{create_blendizzard_contract, setup_test_env};
+use super::testutils::{assert_contract_error, create_blendizzard_contract, setup_test_env, Error};
 use crate::BlendizzardClient;
 use soroban_sdk::testutils::{Address as _, Ledger};
 use soroban_sdk::{vec, Address, Env};
@@ -55,7 +56,6 @@ fn setup_fp_test_env<'a>(
 /// Edge case: Player has no vault balance when starting game.
 /// Should fail with InsufficientFactionPoints error.
 #[test]
-#[should_panic(expected = "Error(Contract, #11)")]
 fn test_fp_with_zero_vault_balance() {
     let env = setup_test_env();
     let (game_contract, _vault_addr, mock_vault, blendizzard) = setup_fp_test_env(&env);
@@ -73,8 +73,8 @@ fn test_fp_with_zero_vault_balance() {
     env.ledger().with_mut(|li| li.timestamp = 1000);
 
     // Try to start game with player1 having 0 vault balance
-    // Should panic with InsufficientFactionPoints (Error #11)
-    blendizzard.start_game(
+    // Should fail with InsufficientFactionPoints (Error #11)
+    let result = blendizzard.try_start_game(
         &game_contract,
         &1,
         &player1,
@@ -82,6 +82,8 @@ fn test_fp_with_zero_vault_balance() {
         &100_0000000,
         &100_0000000,
     );
+
+    assert_contract_error(&result, Error::InsufficientFactionPoints);
 }
 
 /// Test FP calculation with maximum vault balance
@@ -239,15 +241,19 @@ fn test_fp_with_max_time_held() {
     let epoch_player = blendizzard.get_epoch_player(&current_epoch, &player1);
 
     // With 60 days (2x the 30-day asymptote), time_mult should be significantly boosted
-    // The asymptotic formula is: time / (time + 30 days)
+    // The asymptotic formula is: 1.0 + (time / (time + 30 days))
     // At time = 60 days: fraction = 60/(60+30) = 60/90 = 0.667
-    // multiplier = (1-0.667) + (0.667 × MAX_MULTIPLIER)
+    // time_mult = 1.0 + 0.667 = 1.667x
+    //
+    // With $1000 deposit: amount_mult = 1.0 + (1000/2000) = 1.5x
+    // FP = (1000 × 100) × 1.5 × 1.667 ≈ 250,000 FP
+    // After locking 100_0000000 FP wager: available_fp ≈ 150,000 FP (150,000_0000000)
 
-    // Available FP (after locking 100 USDC wager) should still be substantial
+    // Available FP (after locking wager) should still be substantial
     // FP calculation happens at first game of epoch, so it includes the time boost
     assert!(
         epoch_player.available_fp > 800_0000000,
-        "Available FP should be boosted with long hold time (after 100 USDC wager)"
+        "Available FP should be boosted with long hold time (after wager locked)"
     );
 }
 
@@ -320,11 +326,13 @@ fn test_fp_multiplier_caps_at_maximum() {
         "Balance snapshot should be recorded"
     );
 
-    // Available FP should be less than the base amount
-    // (verifies multipliers don't cause infinite growth)
+    // Available FP should be less than base × 100 (base multiplier) × 4 (max combined multipliers)
+    // With BASE_FP_PER_USDC = 100, amount_mult max ≈ 2.0, time_mult max ≈ 2.0
+    // Max FP ≈ base × 100 × 2.0 × 2.0 = base × 400
+    // Using conservative bound of 1000x to allow for calculation variations
     assert!(
-        epoch_player.available_fp < huge_amount * 10,
-        "Available FP should not exceed 10x base (verifies multipliers are capped)"
+        epoch_player.available_fp < huge_amount * 1000,
+        "Available FP should not exceed 1000x base (verifies multipliers are capped)"
     );
 
     // The exact cap depends on implementation, but this verifies no overflow

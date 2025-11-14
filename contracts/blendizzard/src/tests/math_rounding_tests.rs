@@ -307,10 +307,14 @@ fn test_fp_calculation_rounds_down() {
     let epoch_player = blendizzard.get_epoch_player(&0, &player1);
     let total_fp = epoch_player.available_fp;
 
-    // FP should be less than base due to multipliers <1.0
+    // With BASE_FP_PER_USDC = 100, FP should be at least base × 100
+    // But the multipliers should reduce it slightly due to floor rounding
+    // FP = (333_0000000 × 100) × amount_mult × time_mult - wager
+    // = 33,300_0000000 × amount_mult × time_mult - 100_0000000
+    // With small deposit and short time, multipliers are close to 1.0x
     assert!(
-        total_fp < 333_0000000,
-        "FP should be less than base due to multipliers <1.0"
+        total_fp > 333_0000000,
+        "FP should be greater than base (due to 100x multiplier)"
     );
     assert!(total_fp > 0, "FP should still be positive");
 

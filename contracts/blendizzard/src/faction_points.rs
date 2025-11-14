@@ -3,7 +3,9 @@ use soroban_sdk::{Address, Env};
 
 use crate::errors::Error;
 use crate::storage;
-use crate::types::{EpochPlayer, FIXED_POINT_ONE, MAX_AMOUNT_USD, MAX_TIME_SECONDS, SCALAR_7};
+use crate::types::{
+    EpochPlayer, BASE_FP_PER_USDC, FIXED_POINT_ONE, MAX_AMOUNT_USD, MAX_TIME_SECONDS, SCALAR_7,
+};
 
 // ============================================================================
 // Faction Points Calculation
@@ -13,10 +15,11 @@ use crate::types::{EpochPlayer, FIXED_POINT_ONE, MAX_AMOUNT_USD, MAX_TIME_SECOND
 ///
 /// **NEW ARCHITECTURE:** Queries vault balance instead of using cached Player.total_deposited
 ///
-/// From PLAN.md:
+/// # Base Formula
 /// ```
-/// fp = base_deposit_amount * amount_multiplier(deposit_amount) * time_multiplier(time_held)
+/// fp = (base_deposit_amount * 100) * amount_multiplier(deposit_amount) * time_multiplier(time_held)
 /// ```
+/// Where: **1 USDC = 100 FP** (before multipliers)
 ///
 /// # Amount Multiplier
 /// Asymptotic curve toward bonus at $1,000 USD:
@@ -148,11 +151,12 @@ fn calculate_time_multiplier(env: &Env, time_multiplier_start: u64) -> Result<i1
 
 /// Calculate final FP from base amount and multipliers
 ///
-/// Formula: base_amount * amount_mult * time_mult
+/// Formula: (base_amount * BASE_FP_PER_USDC) * amount_mult * time_mult
+/// Where BASE_FP_PER_USDC = 100 (so 1 USDC = 100 FP before multipliers)
 /// Uses fixed-point math to avoid overflow
 ///
 /// # Arguments
-/// * `base_amount` - Base deposit amount
+/// * `base_amount` - Base deposit amount in USDC (7 decimals)
 /// * `amount_mult` - Amount multiplier (fixed-point)
 /// * `time_mult` - Time multiplier (fixed-point)
 ///
@@ -163,12 +167,17 @@ fn calculate_fp_from_multipliers(
     amount_mult: i128,
     time_mult: i128,
 ) -> Result<i128, Error> {
-    // First: base_amount * amount_mult
-    let temp = base_amount
+    // First: base_amount * BASE_FP_PER_USDC
+    let base_fp = base_amount
+        .checked_mul(BASE_FP_PER_USDC)
+        .ok_or(Error::OverflowError)?;
+
+    // Second: base_fp * amount_mult
+    let temp = base_fp
         .fixed_mul_floor(amount_mult, SCALAR_7)
         .ok_or(Error::OverflowError)?;
 
-    // Second: temp * time_mult
+    // Third: temp * time_mult
     let fp = temp
         .fixed_mul_floor(time_mult, SCALAR_7)
         .ok_or(Error::OverflowError)?;

@@ -179,3 +179,6 @@ pub const MAX_TIME_SECONDS: u64 = 30 * 24 * 60 * 60;
 /// Withdrawal threshold for deposit timestamp reset (50%)
 /// Represented as a percentage in fixed-point (0.5 = 50%)
 pub const WITHDRAWAL_RESET_THRESHOLD: i128 = SCALAR_7 / 2;
+
+/// Base FP multiplier: 1 USDC = 100 FP (before amount/time multipliers)
+pub const BASE_FP_PER_USDC: i128 = 100;
