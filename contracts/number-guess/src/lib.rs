@@ -10,7 +10,7 @@
 //! Blendizzard contract. Games cannot be started or completed without FP involvement.
 
 use soroban_sdk::{
-    contract, contractclient, contracterror, contractimpl, contracttype, Address, BytesN, Env,
+    contract, contractclient, contracterror, contractimpl, contracttype, Address, Bytes, BytesN, Env,
 };
 
 // Import Blendizzard contract interface
@@ -262,8 +262,35 @@ impl NumberGuessContract {
         let guess1 = game.player1_guess.ok_or(Error::BothPlayersNotGuessed)?;
         let guess2 = game.player2_guess.ok_or(Error::BothPlayersNotGuessed)?;
 
-        // Generate random winning number between 1 and 10 using PRNG
+        // Generate random winning number between 1 and 10 using seeded PRNG
         // This is done AFTER both players have committed their guesses
+        //
+        // Seed components (all deterministic and identical between sim/submit):
+        // 1. Session ID - unique per game, same between simulation and submission
+        // 2. Player addresses - both players contribute, same between sim/submit
+        // 3. Guesses - committed before reveal, same between sim/submit
+        //
+        // Note: We do NOT include ledger sequence or timestamp because those differ
+        // between simulation and submission, which would cause different winners.
+        //
+        // This ensures:
+        // - Same result between simulation and submission (fully deterministic)
+        // - Cannot be easily gamed (both players contribute to randomness)
+
+        // Build seed more efficiently using native arrays where possible
+        // Total: 12 bytes of fixed data (session_id + 2 guesses)
+        let mut fixed_data = [0u8; 12];
+        fixed_data[0..4].copy_from_slice(&session_id.to_be_bytes());
+        fixed_data[4..8].copy_from_slice(&guess1.to_be_bytes());
+        fixed_data[8..12].copy_from_slice(&guess2.to_be_bytes());
+
+        // Only use Bytes for the final concatenation with player addresses
+        let mut seed_bytes = Bytes::from_array(&env, &fixed_data);
+        seed_bytes.append(&game.player1.to_string().to_bytes());
+        seed_bytes.append(&game.player2.to_string().to_bytes());
+
+        let seed = env.crypto().keccak256(&seed_bytes);
+        env.prng().seed(seed.into());
         let winning_number = env.prng().gen_range::<u64>(1..=10) as u32;
         game.winning_number = Some(winning_number);
 
