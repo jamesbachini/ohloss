@@ -60,6 +60,32 @@ pub struct FactionSelected {
 // - Redundant: players are in GameStarted, factions queryable via get_epoch_player()
 // - Clutters event stream with implementation details
 
+#[contractevent]
+pub struct TimeMultiplierReset {
+    #[topic]
+    pub player: Address,
+    pub epoch: u32,
+    pub previous_balance: i128,
+    pub current_balance: i128,
+    pub withdrawal_percentage: i128, // Fixed-point (SCALAR_7)
+}
+
+// ============================================================================
+// Pause Events
+// ============================================================================
+
+#[contractevent]
+pub struct ContractPaused {
+    pub admin: Address,
+    pub timestamp: u64,
+}
+
+#[contractevent]
+pub struct ContractUnpaused {
+    pub admin: Address,
+    pub timestamp: u64,
+}
+
 // ============================================================================
 // Game Events
 // ============================================================================
@@ -74,6 +100,10 @@ pub struct GameStarted {
     pub player2: Address,
     pub player1_wager: i128,
     pub player2_wager: i128,
+    pub player1_faction: u32,
+    pub player2_faction: u32,
+    pub player1_fp_remaining: i128,
+    pub player2_fp_remaining: i128,
 }
 
 #[contractevent]
@@ -154,6 +184,43 @@ pub(crate) fn emit_faction_selected(env: &Env, player: &Address, faction: u32) {
     .publish(env);
 }
 
+/// Emit time multiplier reset event
+pub(crate) fn emit_time_multiplier_reset(
+    env: &Env,
+    player: &Address,
+    epoch: u32,
+    previous_balance: i128,
+    current_balance: i128,
+    withdrawal_percentage: i128,
+) {
+    TimeMultiplierReset {
+        player: player.clone(),
+        epoch,
+        previous_balance,
+        current_balance,
+        withdrawal_percentage,
+    }
+    .publish(env);
+}
+
+/// Emit contract paused event
+pub(crate) fn emit_contract_paused(env: &Env, admin: &Address) {
+    ContractPaused {
+        admin: admin.clone(),
+        timestamp: env.ledger().timestamp(),
+    }
+    .publish(env);
+}
+
+/// Emit contract unpaused event
+pub(crate) fn emit_contract_unpaused(env: &Env, admin: &Address) {
+    ContractUnpaused {
+        admin: admin.clone(),
+        timestamp: env.ledger().timestamp(),
+    }
+    .publish(env);
+}
+
 /// Emit game started event
 pub(crate) fn emit_game_started(
     env: &Env,
@@ -163,6 +230,10 @@ pub(crate) fn emit_game_started(
     player2: &Address,
     player1_wager: i128,
     player2_wager: i128,
+    player1_faction: u32,
+    player2_faction: u32,
+    player1_fp_remaining: i128,
+    player2_fp_remaining: i128,
 ) {
     GameStarted {
         game_id: game_id.clone(),
@@ -171,6 +242,10 @@ pub(crate) fn emit_game_started(
         player2: player2.clone(),
         player1_wager,
         player2_wager,
+        player1_faction,
+        player2_faction,
+        player1_fp_remaining,
+        player2_fp_remaining,
     }
     .publish(env);
 }

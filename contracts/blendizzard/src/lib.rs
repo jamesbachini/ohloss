@@ -220,6 +220,7 @@ impl Blendizzard {
         admin.require_auth();
 
         storage::set_pause_state(&env, true);
+        events::emit_contract_paused(&env, &admin);
 
         Ok(())
     }
@@ -235,6 +236,7 @@ impl Blendizzard {
         admin.require_auth();
 
         storage::set_pause_state(&env, false);
+        events::emit_contract_unpaused(&env, &admin);
 
         Ok(())
     }

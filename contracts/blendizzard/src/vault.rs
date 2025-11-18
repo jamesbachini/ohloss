@@ -40,6 +40,7 @@ pub(crate) fn get_vault_balance(env: &Env, player: &Address) -> i128 {
 /// * `env` - Contract environment
 /// * `player` - Player to check
 /// * `current_balance` - Player's current vault balance
+/// * `epoch` - Current epoch (for event emission)
 ///
 /// # Returns
 /// * `true` if reset was triggered (>50% withdrawal detected)
@@ -48,6 +49,7 @@ pub(crate) fn check_cross_epoch_withdrawal_reset(
     env: &Env,
     player: &Address,
     current_balance: i128,
+    epoch: u32,
 ) -> Result<bool, Error> {
     // Get player data - if player doesn't exist yet, no reset needed
     let Some(mut player_data) = storage::get_player(env, player) else {
@@ -83,6 +85,16 @@ pub(crate) fn check_cross_epoch_withdrawal_reset(
         // Reset time multiplier start to now
         player_data.time_multiplier_start = env.ledger().timestamp();
         storage::set_player(env, player, &player_data);
+
+        // Emit event for transparency
+        crate::events::emit_time_multiplier_reset(
+            env,
+            player,
+            epoch,
+            player_data.last_epoch_balance,
+            current_balance,
+            withdrawal_ratio,
+        );
     }
 
     Ok(reset)
