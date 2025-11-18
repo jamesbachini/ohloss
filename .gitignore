@@ -6,3 +6,8 @@ target
 .stellar
 
 test_snapshots
+
+# Environment variables (security)
+.env
+.env.local
+.env.*.local
