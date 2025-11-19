@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
 import { blendizzardService } from '@/services/blendizzardService';
-import { devWalletService } from '@/services/devWalletService';
 import { requestCache, createCacheKey } from '@/utils/requestCache';
 import { USDC_DECIMALS } from '@/utils/constants';
+import { useWallet } from '@/hooks/useWallet';
 
 interface RewardsClaimProps {
   userAddress: string;
@@ -11,6 +11,7 @@ interface RewardsClaimProps {
 }
 
 export function RewardsClaim({ userAddress, currentEpoch, onSuccess }: RewardsClaimProps) {
+  const { getContractSigner } = useWallet();
   const [claimableEpochs, setClaimableEpochs] = useState<number[]>([]);
   const [claiming, setClaiming] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -65,7 +66,7 @@ export function RewardsClaim({ userAddress, currentEpoch, onSuccess }: RewardsCl
       setError(null);
       setSuccess(null);
 
-      const signer = devWalletService.getSigner();
+      const signer = getContractSigner();
       const amount = await blendizzardService.claimEpochReward(userAddress, epoch, signer);
 
       const divisor = BigInt(10 ** USDC_DECIMALS);

@@ -1,122 +1,128 @@
 import {
-  isConnected,
-  requestAccess,
-  getNetworkDetails,
-  signTransaction as freighterSignTransaction,
-  WatchWalletChanges,
-} from '@stellar/freighter-api';
-import { NETWORK } from '@/utils/constants';
+  StellarWalletsKit,
+  WalletNetwork,
+  allowAllModules,
+} from '@creit.tech/stellar-wallets-kit';
+import type { ISupportedWallet } from '@creit.tech/stellar-wallets-kit';
+import { NETWORK, NETWORK_PASSPHRASE } from '@/utils/constants';
 
 export interface WalletDetails {
   address: string;
+  walletId: string;
   network: string;
   networkPassphrase: string;
-  networkUrl?: string;
-  sorobanRpcUrl?: string;
 }
 
+/**
+ * Wallet service using Stellar Wallets Kit
+ * Supports multiple wallets (Freighter, xBull, Albedo, etc.)
+ */
 export class WalletService {
-  private watcher: WatchWalletChanges | null = null;
+  private kit: StellarWalletsKit | null = null;
+  private selectedWalletId: string | null = null;
 
   /**
-   * Check if Freighter extension is installed
+   * Initialize the Stellar Wallets Kit
    */
-  async isFreighterInstalled(): Promise<boolean> {
-    try {
-      const result = await isConnected();
-      return result.isConnected;
-    } catch (error) {
-      console.error('Error checking Freighter installation:', error);
-      return false;
-    }
+  private async initKit() {
+    if (this.kit) return this.kit;
+
+    // Convert NETWORK to WalletNetwork enum
+    const network = NETWORK.toLowerCase() === 'testnet' ? WalletNetwork.TESTNET : WalletNetwork.PUBLIC;
+
+    this.kit = new StellarWalletsKit({
+      network,
+      selectedWalletId: this.selectedWalletId || undefined,
+      modules: allowAllModules(),
+    });
+
+    return this.kit;
   }
 
   /**
-   * Request access to user's wallet
-   * Returns the user's public key if successful
+   * Get the kit instance
    */
-  async connect(): Promise<string> {
-    const installed = await this.isFreighterInstalled();
-    if (!installed) {
-      throw new Error(
-        'Freighter wallet is not installed. Please install it from https://www.freighter.app/'
-      );
+  async getKit(): Promise<StellarWalletsKit> {
+    if (!this.kit) {
+      await this.initKit();
     }
-
-    try {
-      const accessObj = await requestAccess();
-
-      if (accessObj.error) {
-        throw new Error(accessObj.error);
-      }
-
-      if (!accessObj.address) {
-        throw new Error('No address returned from Freighter');
-      }
-
-      return accessObj.address;
-    } catch (error) {
-      console.error('Error connecting to Freighter:', error);
-      throw error;
-    }
+    return this.kit!;
   }
 
   /**
-   * Get current network details from Freighter
+   * Open the wallet selection modal
+   * Returns the selected wallet details
    */
-  async getNetworkDetails(): Promise<WalletDetails> {
-    try {
-      const details = await getNetworkDetails();
-      return {
-        address: '', // Address is stored separately in the store
-        network: details.network,
-        networkPassphrase: details.networkPassphrase,
-        networkUrl: details.networkUrl,
-        sorobanRpcUrl: details.sorobanRpcUrl,
-      };
-    } catch (error) {
-      console.error('Error getting network details:', error);
-      throw error;
-    }
-  }
+  async openModal(): Promise<WalletDetails> {
+    const kit = await this.getKit();
 
-  /**
-   * Verify the connected network matches the expected network
-   */
-  async verifyNetwork(): Promise<boolean> {
-    try {
-      const details = await this.getNetworkDetails();
-      const expectedNetwork = NETWORK.toLowerCase();
-      const actualNetwork = details.network.toLowerCase();
+    return new Promise((resolve, reject) => {
+      kit.openModal({
+        onWalletSelected: async (option: ISupportedWallet) => {
+          try {
+            await kit.setWallet(option.id);
+            this.selectedWalletId = option.id;
 
-      return actualNetwork === expectedNetwork;
-    } catch (error) {
-      console.error('Error verifying network:', error);
-      return false;
-    }
-  }
+            const { address } = await kit.getAddress();
 
-  /**
-   * Sign a transaction XDR with Freighter
-   */
-  async signTransaction(
-    xdr: string,
-    networkPassphrase: string,
-    address?: string
-  ): Promise<string> {
-    try {
-      const result = await freighterSignTransaction(xdr, {
-        networkPassphrase,
-        address,
+            resolve({
+              address,
+              walletId: option.id,
+              network: NETWORK,
+              networkPassphrase: NETWORK_PASSPHRASE,
+            });
+          } catch (error) {
+            reject(error);
+          }
+        },
+        onClosed: (err?: Error) => {
+          if (err) {
+            reject(err);
+          } else {
+            reject(new Error('Wallet selection cancelled'));
+          }
+        },
+        modalTitle: 'Connect Your Wallet',
+        notAvailableText: 'No wallets available. Please install a Stellar wallet.',
       });
+    });
+  }
 
-      // Freighter API returns an object with signedTxXdr
-      if (typeof result === 'object' && 'signedTxXdr' in result) {
-        return result.signedTxXdr;
-      }
+  /**
+   * Connect with a specific wallet ID (if already known from session)
+   * Used for reconnecting on page reload
+   */
+  async connectWithWalletId(walletId: string): Promise<string> {
+    const kit = await this.getKit();
 
-      // Fallback if it returns a string directly
-      return result as string;
+    try {
+      await kit.setWallet(walletId);
+      this.selectedWalletId = walletId;
+
+      const { address } = await kit.getAddress();
+      return address;
+    } catch (error) {
+      console.error('Error reconnecting wallet:', error);
+      throw new Error('Failed to reconnect wallet. Please connect again.');
+    }
+  }
+
+  /**
+   * Sign a transaction XDR
+   * Returns { signedTxXdr: string, signerAddress?: string, error?: WalletError }
+   */
+  async signTransaction(xdr: string, opts?: { address?: string }) {
+    if (!this.kit) {
+      throw new Error('Wallet not initialized. Please connect first.');
+    }
+
+    try {
+      // Return the full response object from the kit
+      // The SDK expects at minimum { signedTxXdr: string }
+      return await this.kit.signTransaction(xdr, {
+        networkPassphrase: NETWORK_PASSPHRASE,
+        address: opts?.address,
+      });
     } catch (error) {
       console.error('Error signing transaction:', error);
       throw error;
@@ -124,39 +130,74 @@ export class WalletService {
   }
 
   /**
-   * Watch for wallet changes (address or network changes)
-   * Calls the provided callback when changes are detected
+   * Sign an auth entry (for Soroban contracts)
+   * Returns { signedAuthEntry: string, signerAddress?: string } to match the contract.ClientOptions interface
+   *
+   * NOTE: stellar-wallets-kit already converts Freighter's Buffer response to base64 string
    */
-  watchWalletChanges(callback: (details: WalletDetails) => void): void {
-    // Stop existing watcher if any
-    this.stopWatching();
+  async signAuthEntry(authEntry: string, opts?: { address?: string }) {
+    if (!this.kit) {
+      throw new Error('Wallet not initialized. Please connect first.');
+    }
 
-    this.watcher = new WatchWalletChanges(1000); // Poll every 1 second
-
-    this.watcher.watch((changeDetails) => {
-      callback({
-        address: changeDetails.address,
-        network: changeDetails.network,
-        networkPassphrase: changeDetails.networkPassphrase,
+    try {
+      const result = await this.kit.signAuthEntry(authEntry, {
+        networkPassphrase: NETWORK_PASSPHRASE,
+        address: opts?.address,
       });
-    });
-  }
 
-  /**
-   * Stop watching for wallet changes
-   */
-  stopWatching(): void {
-    if (this.watcher) {
-      this.watcher.stop();
-      this.watcher = null;
+      // stellar-wallets-kit already handles the conversion from Buffer to base64
+      // Just return the result as-is
+      return {
+        signedAuthEntry: result.signedAuthEntry,
+        signerAddress: result.signerAddress,
+      };
+    } catch (error) {
+      console.error('Error signing auth entry:', error);
+      // Some wallets don't support signAuthEntry
+      if (error instanceof Error) {
+        if (error.message.includes('not supported') || error.message.includes('not implemented')) {
+          throw new Error(
+            'This wallet does not support signing auth entries. ' +
+            'Please use dev mode or a compatible wallet.'
+          );
+        }
+      }
+      throw error;
     }
   }
 
   /**
-   * Get installation link for Freighter
+   * Get the current network
    */
-  getInstallLink(): string {
-    return 'https://www.freighter.app/';
+  getNetwork(): { network: string; networkPassphrase: string } {
+    return {
+      network: NETWORK,
+      networkPassphrase: NETWORK_PASSPHRASE,
+    };
+  }
+
+  /**
+   * Disconnect the wallet
+   */
+  async disconnect(): Promise<void> {
+    if (this.kit) {
+      // Some wallet modules support disconnect
+      try {
+        await this.kit.disconnect?.();
+      } catch (error) {
+        console.warn('Wallet disconnect not supported or failed:', error);
+      }
+    }
+    this.kit = null;
+    this.selectedWalletId = null;
+  }
+
+  /**
+   * Get the currently selected wallet ID
+   */
+  getSelectedWalletId(): string | null {
+    return this.selectedWalletId;
   }
 }
 

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { blendizzardService } from '@/services/blendizzardService';
-import { devWalletService } from '@/services/devWalletService';
+import { useWallet } from '@/hooks/useWallet';
 
 interface FactionSelectionProps {
   userAddress: string;
@@ -38,6 +38,7 @@ const FACTIONS = [
 ];
 
 export function FactionSelection({ userAddress, onSuccess }: FactionSelectionProps) {
+  const { getContractSigner } = useWallet();
   const [selectedFaction, setSelectedFaction] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -49,7 +50,7 @@ export function FactionSelection({ userAddress, onSuccess }: FactionSelectionPro
       setLoading(true);
       setError(null);
 
-      const signer = devWalletService.getSigner();
+      const signer = getContractSigner();
       await blendizzardService.selectFaction(userAddress, selectedFaction, signer);
 
       onSuccess();

@@ -76,5 +76,5 @@ export class DevWalletService {
   }
 }
 
-// Export singleton instance
+// Export both the class and singleton instance
 export const devWalletService = new DevWalletService();

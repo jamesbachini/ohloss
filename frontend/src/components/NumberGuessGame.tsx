@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { numberGuessService } from '@/services/numberGuessService';
-import { devWalletService } from '@/services/devWalletService';
 import { requestCache, createCacheKey } from '@/utils/requestCache';
+import { useWallet } from '@/hooks/useWallet';
 import type { Game } from '../../../bunt/bindings/number-guess/dist/index';
 
 interface NumberGuessGameProps {
@@ -24,6 +24,7 @@ export function NumberGuessGame({
   onStandingsRefresh,
   onGameComplete
 }: NumberGuessGameProps) {
+  const { getContractSigner } = useWallet();
   // Use a session ID that fits in u32 (max 4,294,967,295)
   // Take the last 9 digits of the timestamp to ensure uniqueness while fitting in u32
   const [sessionId, setSessionId] = useState<number>(() => Math.floor(Date.now() / 1000) % 1000000000);
@@ -158,7 +159,7 @@ export function NumberGuessGame({
         throw new Error('Enter Player 2 address');
       }
 
-      const signer = devWalletService.getSigner();
+      const signer = getContractSigner();
 
       console.log('Preparing transaction for Player 1 to sign...');
       const xdr = await numberGuessService.prepareStartGame(
@@ -258,7 +259,7 @@ export function NumberGuessGame({
         throw new Error('You are not one of the players in this game');
       }
 
-      const signer = devWalletService.getSigner();
+      const signer = getContractSigner();
       const parsedSessionId = xdrDetails.sessionId;
 
       // Step 1: Check what signatures are needed
@@ -434,7 +435,7 @@ export function NumberGuessGame({
       setError(null);
       setSuccess(null);
 
-      const signer = devWalletService.getSigner();
+      const signer = getContractSigner();
       await numberGuessService.makeGuess(sessionId, userAddress, guess, signer);
 
       setSuccess(`Guess submitted: ${guess}`);
@@ -453,7 +454,7 @@ export function NumberGuessGame({
       setError(null);
       setSuccess(null);
 
-      const signer = devWalletService.getSigner();
+      const signer = getContractSigner();
       const winnerResult = await numberGuessService.revealWinner(sessionId, userAddress, signer);
 
       // Reload game state to get the winner

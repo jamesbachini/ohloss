@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
 import { blendizzardService } from '@/services/blendizzardService';
 import { feeVaultService } from '@/services/feeVaultService';
-import { devWalletService } from '@/services/devWalletService';
 import { balanceService } from '@/services/balanceService';
 import { requestCache, createCacheKey } from '@/utils/requestCache';
 import { USDC_DECIMALS } from '@/utils/constants';
@@ -11,13 +10,14 @@ import { FactionStandings } from './FactionStandings';
 import { GamesCatalog } from './GamesCatalog';
 import { VaultQuickActions } from './VaultQuickActions';
 import { RewardsClaim } from './RewardsClaim';
+import { useWallet } from '@/hooks/useWallet';
 
 interface DashboardProps {
-  playerNumber: 1 | 2;
   onLogout: () => void;
 }
 
-export function Dashboard({ playerNumber, onLogout }: DashboardProps) {
+export function Dashboard({ onLogout }: DashboardProps) {
+  const { walletType, walletId, publicKey, getContractSigner } = useWallet();
   const [currentEpoch, setCurrentEpoch] = useState<number>(0);
   const [vaultBalance, setVaultBalance] = useState<bigint>(0n);
   const [faction, setFaction] = useState<number | null>(null); // Selected faction (for next epoch)
@@ -32,7 +32,7 @@ export function Dashboard({ playerNumber, onLogout }: DashboardProps) {
   const [switchingFaction, setSwitchingFaction] = useState(false);
   const [xlmBalance, setXlmBalance] = useState<bigint>(0n);
 
-  const userAddress = devWalletService.getPublicKey();
+  const userAddress = publicKey!;
 
   const copyAddressToClipboard = async () => {
     try {
@@ -47,7 +47,7 @@ export function Dashboard({ playerNumber, onLogout }: DashboardProps) {
   const handleSwitchFaction = async (newFactionId: number) => {
     try {
       setSwitchingFaction(true);
-      const signer = devWalletService.getSigner();
+      const signer = getContractSigner();
 
       await blendizzardService.selectFaction(userAddress, newFactionId, signer);
 
@@ -289,7 +289,7 @@ export function Dashboard({ playerNumber, onLogout }: DashboardProps) {
               title="Click to copy address"
             >
               <div className="text-xs font-semibold text-blue-600 mb-1 flex items-center gap-1.5">
-                <span>Player {playerNumber}</span>
+                <span>{walletType === 'dev' ? walletId : 'Wallet'}</span>
                 <svg className="w-3.5 h-3.5 opacity-50 group-hover:opacity-100 transition-opacity" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
                 </svg>

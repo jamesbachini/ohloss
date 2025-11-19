@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { blendizzardService } from '@/services/blendizzardService';
-import { devWalletService } from '@/services/devWalletService';
 import { requestCache, createCacheKey } from '@/utils/requestCache';
+import { useWallet } from '@/hooks/useWallet';
 
 interface EpochTimerProps {
   currentEpoch: number;
@@ -9,6 +9,7 @@ interface EpochTimerProps {
 }
 
 export function EpochTimer({ currentEpoch, onEpochCycled }: EpochTimerProps) {
+  const { publicKey, getContractSigner } = useWallet();
   const [timeRemaining, setTimeRemaining] = useState<string>('Loading...');
   const [epochEndTime, setEpochEndTime] = useState<number>(0);
   const [epochEnded, setEpochEnded] = useState(false);
@@ -81,10 +82,12 @@ export function EpochTimer({ currentEpoch, onEpochCycled }: EpochTimerProps) {
       setError(null);
       setSuccess(null);
 
-      const userAddress = devWalletService.getPublicKey();
-      const signer = devWalletService.getSigner();
+      if (!publicKey) {
+        throw new Error('Wallet not connected');
+      }
 
-      const newEpoch = await blendizzardService.cycleEpoch(userAddress, signer);
+      const signer = getContractSigner();
+      const newEpoch = await blendizzardService.cycleEpoch(publicKey, signer);
 
       setSuccess(`Successfully cycled to Epoch #${newEpoch}!`);
       setEpochEnded(false);

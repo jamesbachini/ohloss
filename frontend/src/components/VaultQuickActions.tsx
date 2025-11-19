@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react';
 import { feeVaultService } from '@/services/feeVaultService';
-import { devWalletService } from '@/services/devWalletService';
 import { balanceService } from '@/services/balanceService';
 import { requestCache, createCacheKey } from '@/utils/requestCache';
 import { USDC_DECIMALS } from '@/utils/constants';
+import { useWallet } from '@/hooks/useWallet';
 
 interface VaultQuickActionsProps {
   userAddress: string;
@@ -12,6 +12,7 @@ interface VaultQuickActionsProps {
 }
 
 export function VaultQuickActions({ userAddress, onSuccess, refreshTrigger = 0 }: VaultQuickActionsProps) {
+  const { getContractSigner } = useWallet();
   const [amount, setAmount] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -91,7 +92,7 @@ export function VaultQuickActions({ userAddress, onSuccess, refreshTrigger = 0 }
         throw new Error('Enter a valid amount');
       }
 
-      const signer = devWalletService.getSigner();
+      const signer = getContractSigner();
       await feeVaultService.deposit(userAddress, amountBigInt, signer);
 
       setSuccess('Deposited successfully!');
@@ -117,7 +118,7 @@ export function VaultQuickActions({ userAddress, onSuccess, refreshTrigger = 0 }
         throw new Error('Enter a valid amount');
       }
 
-      const signer = devWalletService.getSigner();
+      const signer = getContractSigner();
       await feeVaultService.withdraw(userAddress, amountBigInt, signer);
 
       setSuccess('Withdrawn successfully!');

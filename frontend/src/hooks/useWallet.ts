@@ -1,17 +1,20 @@
 import { useEffect, useCallback } from 'react';
 import { useWalletStore } from '@/store/walletSlice';
-import { walletService, type WalletDetails } from '@/services/walletService';
-import { NETWORK } from '@/utils/constants';
+import { walletService } from '@/services/walletService';
+import { devWalletService, DevWalletService } from '@/services/devWalletService';
+import { getSigner } from '@/utils/signerHelper';
 
 export function useWallet() {
   const {
     publicKey,
+    walletId,
+    walletType,
     isConnected,
     isConnecting,
     network,
     networkPassphrase,
     error,
-    setPublicKey,
+    setWallet,
     setConnecting,
     setNetwork,
     setError,
@@ -19,123 +22,150 @@ export function useWallet() {
   } = useWalletStore();
 
   /**
-   * Connect to Freighter wallet
+   * Attempt to reconnect wallet on mount (if session exists)
+   */
+  useEffect(() => {
+    const reconnect = async () => {
+      if (publicKey && walletId && walletType === 'wallet') {
+        try {
+          // Try to reconnect with the saved wallet ID
+          const address = await walletService.connectWithWalletId(walletId);
+
+          // Verify the address matches (wallet might have switched accounts)
+          if (address !== publicKey) {
+            console.warn('Wallet address changed, updating store');
+            setWallet(address, walletId, 'wallet');
+          }
+
+          const { network: net, networkPassphrase: pass } = walletService.getNetwork();
+          setNetwork(net, pass);
+        } catch (err) {
+          console.warn('Failed to reconnect wallet, clearing session:', err);
+          storeDisconnect();
+        }
+      } else if (publicKey && walletType === 'dev') {
+        // Dev wallet doesn't need reconnection, just verify it's still valid
+        try {
+          devWalletService.getPublicKey();
+        } catch (err) {
+          console.warn('Dev wallet session invalid, clearing:', err);
+          storeDisconnect();
+        }
+      }
+    };
+
+    reconnect();
+  }, []); // Only run on mount
+
+  /**
+   * Connect to a wallet using the modal
    */
   const connect = useCallback(async () => {
     try {
       setConnecting(true);
       setError(null);
 
-      // Check if Freighter is installed
-      const installed = await walletService.isFreighterInstalled();
-      if (!installed) {
-        throw new Error('Freighter wallet is not installed');
-      }
+      const details = await walletService.openModal();
 
-      // Request access to wallet
-      const address = await walletService.connect();
-
-      // Get network details
-      const networkDetails = await walletService.getNetworkDetails();
-
-      // Verify network matches expected network
-      const isCorrectNetwork = await walletService.verifyNetwork();
-      if (!isCorrectNetwork) {
-        throw new Error(
-          `Please switch to ${NETWORK} network in Freighter. Current network: ${networkDetails.network}`
-        );
-      }
-
-      // Update store
-      setPublicKey(address);
-      setNetwork(networkDetails.network, networkDetails.networkPassphrase);
+      // Update store with wallet details
+      setWallet(details.address, details.walletId, 'wallet');
+      setNetwork(details.network, details.networkPassphrase);
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to connect wallet';
       setError(errorMessage);
       console.error('Wallet connection error:', err);
       throw err;
     }
-  }, [setPublicKey, setConnecting, setNetwork, setError]);
+  }, [setWallet, setConnecting, setNetwork, setError]);
+
+  /**
+   * Connect as a dev player (for testing)
+   */
+  const connectDev = useCallback(
+    async (playerNumber: 1 | 2) => {
+      try {
+        setConnecting(true);
+        setError(null);
+
+        devWalletService.initPlayer(playerNumber);
+        const address = devWalletService.getPublicKey();
+
+        // Get network from wallet service
+        const { network: net, networkPassphrase: pass } = walletService.getNetwork();
+
+        // Update store
+        setWallet(address, `dev-player${playerNumber}`, 'dev');
+        setNetwork(net, pass);
+      } catch (err) {
+        const errorMessage = err instanceof Error ? err.message : 'Failed to connect dev wallet';
+        setError(errorMessage);
+        console.error('Dev wallet connection error:', err);
+        throw err;
+      }
+    },
+    [setWallet, setConnecting, setNetwork, setError]
+  );
 
   /**
    * Disconnect wallet
    */
-  const disconnect = useCallback(() => {
-    walletService.stopWatching();
+  const disconnect = useCallback(async () => {
+    if (walletType === 'wallet') {
+      await walletService.disconnect();
+    } else if (walletType === 'dev') {
+      devWalletService.disconnect();
+    }
     storeDisconnect();
-  }, [storeDisconnect]);
+  }, [walletType, storeDisconnect]);
 
   /**
-   * Sign a transaction
+   * Get a signer for contract interactions
+   */
+  const getContractSigner = useCallback(() => {
+    if (!isConnected || !publicKey || !walletType) {
+      throw new Error('Wallet not connected');
+    }
+
+    return getSigner(walletType, publicKey);
+  }, [isConnected, publicKey, walletType]);
+
+  /**
+   * Sign a transaction (direct method for backward compatibility)
+   * Returns { signedTxXdr: string; signerAddress?: string; error?: WalletError }
    */
   const signTransaction = useCallback(
-    async (xdr: string, passphrase?: string): Promise<string> => {
-      if (!isConnected || !publicKey) {
+    async (xdr: string) => {
+      if (!isConnected || !publicKey || !walletType) {
         throw new Error('Wallet not connected');
       }
 
-      const passphraseToUse = passphrase || networkPassphrase;
-      if (!passphraseToUse) {
-        throw new Error('Network passphrase not available');
-      }
-
       try {
-        return await walletService.signTransaction(xdr, passphraseToUse, publicKey);
+        if (walletType === 'dev') {
+          return await devWalletService.signTransaction(xdr);
+        } else {
+          return await walletService.signTransaction(xdr, { address: publicKey });
+        }
       } catch (err) {
         const errorMessage = err instanceof Error ? err.message : 'Failed to sign transaction';
         setError(errorMessage);
         throw err;
       }
     },
-    [isConnected, publicKey, networkPassphrase, setError]
+    [isConnected, publicKey, walletType, setError]
   );
 
   /**
-   * Watch for wallet changes (account or network switching)
+   * Check if dev mode is available
    */
-  useEffect(() => {
-    if (!isConnected) return;
-
-    walletService.watchWalletChanges((details: WalletDetails) => {
-      // If address changed, update it
-      if (details.address && details.address !== publicKey) {
-        setPublicKey(details.address);
-      }
-
-      // If network changed, verify it matches expected network
-      if (details.network) {
-        const expectedNetwork = NETWORK.toLowerCase();
-        const actualNetwork = details.network.toLowerCase();
-
-        if (actualNetwork !== expectedNetwork) {
-          setError(
-            `Network mismatch! Please switch to ${NETWORK} network in Freighter. Current: ${details.network}`
-          );
-        } else {
-          setNetwork(details.network, details.networkPassphrase);
-          // Clear error if network is now correct
-          if (error?.includes('Network mismatch')) {
-            setError(null);
-          }
-        }
-      }
-    });
-
-    return () => {
-      walletService.stopWatching();
-    };
-  }, [isConnected, publicKey, error, setPublicKey, setNetwork, setError]);
-
-  /**
-   * Get Freighter installation link
-   */
-  const getInstallLink = useCallback(() => {
-    return walletService.getInstallLink();
+  const isDevModeAvailable = useCallback(() => {
+    return DevWalletService.isDevModeAvailable();
   }, []);
 
   return {
     // State
     publicKey,
+    walletId,
+    walletType,
     isConnected,
     isConnecting,
     network,
@@ -144,8 +174,10 @@ export function useWallet() {
 
     // Actions
     connect,
+    connectDev,
     disconnect,
     signTransaction,
-    getInstallLink,
+    getContractSigner,
+    isDevModeAvailable,
   };
 }
