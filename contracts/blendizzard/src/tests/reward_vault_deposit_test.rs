@@ -7,12 +7,17 @@
 /// 1. Player's USDC balance should NOT increase (USDC goes to vault)
 /// 2. Contract calls vault.deposit() with player and reward amount
 /// 3. Player receives vault shares (returned by deposit call)
-use super::fee_vault_utils::{create_mock_vault, MockVaultClient};
+///
+/// Uses REAL FeeVault to verify actual deposit behavior.
+use super::blend_utils::{create_blend_pool, EnvTestUtils};
+use super::fee_vault_utils::{create_fee_vault, FeeVaultClient};
 use super::soroswap_utils::{add_liquidity, create_factory, create_router, create_token, TokenClient};
 use super::testutils::{create_blendizzard_contract, setup_test_env};
 use crate::BlendizzardClient;
+use blend_contract_sdk::testutils::BlendFixture;
+use sep_41_token::testutils::MockTokenClient;
 use soroban_sdk::testutils::{Address as _, Ledger};
-use soroban_sdk::{vec, Address, Env};
+use soroban_sdk::{vec, Address, Env, Map};
 
 // ============================================================================
 // Test Setup Helpers
@@ -22,23 +27,39 @@ fn setup_reward_claim_env<'a>(
     env: &'a Env,
 ) -> (
     Address,                      // game contract
-    Address,                      // mock vault address
-    MockVaultClient<'a>,          // mock vault client
+    Address,                      // fee vault address
+    FeeVaultClient<'a>,           // fee vault client
     BlendizzardClient<'a>,        // blendizzard client
     TokenClient<'a>,              // USDC token client
     TokenClient<'a>,              // BLND token client
 ) {
+    env.cost_estimate().budget().reset_unlimited();
+    env.mock_all_auths();
+    env.set_default_info();
+
     let admin = Address::generate(env);
     let game = Address::generate(env);
 
-    let mock_vault_addr = create_mock_vault(env);
-    let mock_vault = MockVaultClient::new(env, &mock_vault_addr);
-
-    // Create real tokens for Soroswap
+    // Create real tokens (used by both Blend and Soroswap)
     let blnd_token_client = create_token(env, &admin);
     let usdc_token_client = create_token(env, &admin);
     let blnd_token = blnd_token_client.address.clone();
     let usdc_token = usdc_token_client.address.clone();
+
+    // Also create MockTokenClient for Blend pool creation
+    let _blnd_client_mock = MockTokenClient::new(env, &blnd_token);
+    let usdc_client_mock = MockTokenClient::new(env, &usdc_token);
+    let xlm = env
+        .register_stellar_asset_contract_v2(admin.clone())
+        .address();
+    let xlm_client = MockTokenClient::new(env, &xlm);
+
+    // Create Blend ecosystem
+    let blend_fixture = BlendFixture::deploy(env, &admin, &blnd_token, &usdc_token);
+    let pool = create_blend_pool(env, &blend_fixture, &admin, &usdc_client_mock, &xlm_client);
+
+    // Create REAL FeeVault
+    let fee_vault = create_fee_vault(env, &admin, &pool, &usdc_token, 0, 100_00000, None);
 
     // Setup Soroswap infrastructure
     let (token_a, token_b) = if blnd_token < usdc_token {
@@ -74,7 +95,7 @@ fn setup_reward_claim_env<'a>(
     let blendizzard = create_blendizzard_contract(
         env,
         &admin,
-        &mock_vault_addr,
+        &fee_vault.address,
         &router_address,
         &blnd_token,
         &usdc_token,
@@ -84,7 +105,7 @@ fn setup_reward_claim_env<'a>(
 
     blendizzard.add_game(&game);
 
-    (game, mock_vault_addr, mock_vault, blendizzard, usdc_token_client, blnd_token_client)
+    (game, fee_vault.address.clone(), fee_vault, blendizzard, usdc_token_client, blnd_token_client)
 }
 
 // ============================================================================
@@ -94,101 +115,94 @@ fn setup_reward_claim_env<'a>(
 #[test]
 fn test_claim_reward_deposits_to_vault() {
     let env = setup_test_env();
-    let (game, _vault_addr, mock_vault, blendizzard, usdc_client, blnd_client) =
+    let (game, _vault_addr, _fee_vault, blendizzard, usdc_client, blnd_client) =
         setup_reward_claim_env(&env);
 
     let player1 = Address::generate(&env);
     let player2 = Address::generate(&env);
 
-    // Setup: Give players vault balances
-    mock_vault.set_user_balance(&player1, &1000_0000000); // 1000 USDC
-    mock_vault.set_user_balance(&player2, &1000_0000000);
+    // For this test, we manually create the epoch rather than playing games
+    // This simplifies the setup and focuses on testing the claim reward flow
 
-    // Setup: Select factions (different factions)
-    blendizzard.select_faction(&player1, &0); // WholeNoodle
-    blendizzard.select_faction(&player2, &1); // PointyStick
+    // Manually create finalized epoch
+    let reward_pool = 1000_0000000i128; // 1000 USDC
+    let mut faction_standings = Map::new(&env);
+    faction_standings.set(0, 500_0000000); // Faction 0 has 500 FP
+    faction_standings.set(1, 300_0000000); // Faction 1 has 300 FP
 
-    // Setup: Play a game (player1 wins)
-    let session = 1u32;
-    blendizzard.start_game(&game, &session, &player1, &player2, &100_0000000, &100_0000000);
-    blendizzard.end_game(&session, &true); // player1 wins
+    let epoch_info = crate::types::EpochInfo {
+        start_time: 0,
+        end_time: 86400,
+        faction_standings: faction_standings.clone(),
+        reward_pool,
+        winning_faction: Some(0), // Faction 0 wins
+        is_finalized: true,
+    };
 
-    // Setup: Cycle epoch to finalize rewards
-    // Set up BLND in mock vault admin balance (simulating yield accumulated)
-    let blnd_amount = 1000_0000000i128; // 1000 BLND
-    mock_vault.set_admin_balance(&blnd_amount);
-
-    // Mint BLND to contract (will be used in swap simulation)
-    let contract_addr = blendizzard.address.clone();
-    blnd_client.mint(&contract_addr, &blnd_amount);
-
-    // Mint USDC to contract (simulating successful swap result)
-    let usdc_from_swap = 500_0000000i128; // 500 USDC from swap
-    usdc_client.mint(&contract_addr, &usdc_from_swap);
-
-    env.ledger().with_mut(|li| {
-        li.timestamp += 86400 + 1; // Move past epoch end
+    env.as_contract(&blendizzard.address, || {
+        crate::storage::set_epoch(&env, 0, &epoch_info);
     });
 
-    let _cycle_result = blendizzard.try_cycle_epoch();
-    // Note: cycle_epoch may fail due to swap issues in test env, but that's ok
-    // The key is that if it succeeds, rewards should go to vault
+    // Create player's epoch data (player is in winning faction)
+    let player_fp = 250_0000000i128; // Player contributed 250 FP (half of faction 0's total)
+    let epoch_player = crate::types::EpochPlayer {
+        epoch_faction: Some(0),
+        epoch_balance_snapshot: 1000_0000000,
+        available_fp: 0,
+        total_fp_contributed: player_fp,
+    };
+
+    env.as_contract(&blendizzard.address, || {
+        crate::storage::set_epoch_player(&env, 0, &player1, &epoch_player);
+    });
+
+    // Give the blendizzard contract USDC for rewards
+    usdc_client.mint(&blendizzard.address, &reward_pool);
 
     // Track balances BEFORE claim
     let usdc_before = usdc_client.balance(&player1);
-    let contract_usdc_before = usdc_client.balance(&blendizzard.address);
+    let shares_before = _fee_vault.get_shares(&player1);
 
     // ACT: Claim reward
     let claimed_amount = blendizzard.claim_epoch_reward(&player1, &0);
 
-    // ASSERT: Claimed amount should be > 0
-    assert!(claimed_amount > 0, "Winner should receive rewards");
-
-    // ASSERT: Verify balances after claim
-    let usdc_after = usdc_client.balance(&player1);
-    let contract_usdc_after = usdc_client.balance(&blendizzard.address);
-
-    // With MockVault: USDC is transferred to player and deposit() is called
-    // The mock doesn't actually move tokens from player to vault, so player keeps the USDC
-    // In production with real FeeVault:
-    // - Player USDC would stay at usdc_before (0)
-    // - Vault would hold the USDC
-    // - Player would have vault shares
-
-    // For this test, verify that:
-    // 1. Contract transferred USDC out (contract balance decreased)
+    // ASSERT 1: Player should receive a reward (50% of pool)
+    let expected_reward = reward_pool / 2; // 500 USDC
     assert_eq!(
-        contract_usdc_after,
-        contract_usdc_before - claimed_amount,
-        "Contract should have transferred claimed amount"
+        claimed_amount, expected_reward,
+        "Player should receive 50% of reward pool"
     );
 
-    // 2. Player received the USDC (with MockVault limitation)
+    // ASSERT 2: KEY TEST - Player's USDC wallet balance should NOT increase
+    // With REAL FeeVault, USDC goes: contract → player → vault
+    let usdc_after = usdc_client.balance(&player1);
     assert_eq!(
-        usdc_after,
-        usdc_before + claimed_amount,
-        "Player should have received USDC (MockVault doesn't transfer it to vault)"
+        usdc_after, usdc_before,
+        "Player USDC balance should not change (deposited into vault)"
+    );
+
+    // ASSERT 3: Player should have vault shares (proof that deposit happened)
+    let shares_after = _fee_vault.get_shares(&player1);
+    assert!(
+        shares_after > shares_before,
+        "Player should have received vault shares"
+    );
+
+    // ASSERT 4: Player's underlying tokens in vault should equal claimed amount
+    let underlying = _fee_vault.get_underlying_tokens(&player1);
+    assert!(
+        underlying >= claimed_amount,
+        "Player's vault balance should be at least the claimed amount"
     );
 }
 
 #[test]
 fn test_claim_reward_cannot_claim_twice() {
     let env = setup_test_env();
-    let (game, _vault_addr, mock_vault, blendizzard, usdc_client, _blnd_client) =
+    let (_game, _vault_addr, _fee_vault, blendizzard, usdc_client, _blnd_client) =
         setup_reward_claim_env(&env);
 
     let player1 = Address::generate(&env);
-    let player2 = Address::generate(&env);
-
-    mock_vault.set_user_balance(&player1, &1000_0000000);
-    mock_vault.set_user_balance(&player2, &1000_0000000);
-
-    blendizzard.select_faction(&player1, &0);
-    blendizzard.select_faction(&player2, &1);
-
-    let session = 1u32;
-    blendizzard.start_game(&game, &session, &player1, &player2, &100_0000000, &100_0000000);
-    blendizzard.end_game(&session, &true);
 
     // Manually finalize epoch (simpler than cycle_epoch with Soroswap)
     let reward_pool = 500_0000000i128;
@@ -198,15 +212,35 @@ fn test_claim_reward_cannot_claim_twice() {
         li.timestamp += 86400 + 1;
     });
 
-    // Get the current epoch data and manually finalize it
+    // Manually create finalized epoch with faction standings
     let current_epoch_num = 0u32;
-    let mut epoch_info = blendizzard.get_epoch(&current_epoch_num);
-    epoch_info.reward_pool = reward_pool;
-    epoch_info.is_finalized = true;
-    epoch_info.winning_faction = Some(0); // WholeNoodle wins
+    let mut faction_standings = Map::new(&env);
+    faction_standings.set(0, 500_0000000); // Faction 0 has 500 FP
+
+    let epoch_info = crate::types::EpochInfo {
+        start_time: 0,
+        end_time: 86400,
+        faction_standings,
+        reward_pool,
+        winning_faction: Some(0), // Faction 0 wins
+        is_finalized: true,
+    };
 
     env.as_contract(&blendizzard.address, || {
         crate::storage::set_epoch(&env, current_epoch_num, &epoch_info);
+    });
+
+    // Create player's epoch data (player is in winning faction)
+    let player_fp = 250_0000000i128; // Player contributed 250 FP
+    let epoch_player = crate::types::EpochPlayer {
+        epoch_faction: Some(0),
+        epoch_balance_snapshot: 1000_0000000,
+        available_fp: 0,
+        total_fp_contributed: player_fp,
+    };
+
+    env.as_contract(&blendizzard.address, || {
+        crate::storage::set_epoch_player(&env, current_epoch_num, &player1, &epoch_player);
     });
 
     // First claim should succeed
@@ -224,38 +258,13 @@ fn test_claim_reward_cannot_claim_twice() {
 #[test]
 fn test_claim_reward_proportional_distribution() {
     let env = setup_test_env();
-    let (game, _vault_addr, mock_vault, blendizzard, usdc_client, _blnd_client) =
+    let (_game, _vault_addr, _fee_vault, blendizzard, usdc_client, _blnd_client) =
         setup_reward_claim_env(&env);
 
     // Three players with different FP contributions
     let player1 = Address::generate(&env);
     let player2 = Address::generate(&env);
     let player3 = Address::generate(&env);
-
-    // All in same faction (WholeNoodle)
-    mock_vault.set_user_balance(&player1, &1000_0000000); // 1000 USDC
-    mock_vault.set_user_balance(&player2, &2000_0000000); // 2000 USDC (2x player1)
-    mock_vault.set_user_balance(&player3, &3000_0000000); // 3000 USDC (3x player1)
-
-    blendizzard.select_faction(&player1, &0);
-    blendizzard.select_faction(&player2, &0);
-    blendizzard.select_faction(&player3, &0);
-
-    // Play games to contribute FP
-    let session1 = 1u32;
-    let session2 = 2u32;
-    let dummy_opponent = Address::generate(&env);
-    mock_vault.set_user_balance(&dummy_opponent, &100_0000000);
-    blendizzard.select_faction(&dummy_opponent, &1); // Different faction
-
-    // Each player contributes different amounts
-    blendizzard.start_game(&game, &session1, &player1, &dummy_opponent, &100_0000000, &10_0000000);
-    blendizzard.end_game(&session1, &true);
-
-    blendizzard.start_game(&game, &session2, &player2, &dummy_opponent, &200_0000000, &10_0000000);
-    blendizzard.end_game(&session2, &true);
-
-    // player3 doesn't play (0 FP contributed)
 
     // Manually finalize epoch (simpler than cycle_epoch with Soroswap)
     let total_rewards = 600_0000000i128; // 600 USDC
@@ -265,15 +274,45 @@ fn test_claim_reward_proportional_distribution() {
         li.timestamp += 86400 + 1;
     });
 
-    // Get the current epoch data and manually finalize it
+    // Manually create finalized epoch
     let current_epoch_num = 0u32;
-    let mut epoch_info = blendizzard.get_epoch(&current_epoch_num);
-    epoch_info.reward_pool = total_rewards;
-    epoch_info.is_finalized = true;
-    epoch_info.winning_faction = Some(0); // WholeNoodle wins
+    let mut faction_standings = Map::new(&env);
+    faction_standings.set(0, 300_0000000); // Total FP for faction 0
+
+    let epoch_info = crate::types::EpochInfo {
+        start_time: 0,
+        end_time: 86400,
+        faction_standings,
+        reward_pool: total_rewards,
+        winning_faction: Some(0), // Faction 0 wins
+        is_finalized: true,
+    };
 
     env.as_contract(&blendizzard.address, || {
         crate::storage::set_epoch(&env, current_epoch_num, &epoch_info);
+    });
+
+    // Create epoch player data: player1 has 100 FP, player2 has 200 FP (2x player1)
+    let player1_fp = 100_0000000i128;
+    let player2_fp = 200_0000000i128;
+
+    let epoch_player1 = crate::types::EpochPlayer {
+        epoch_faction: Some(0),
+        epoch_balance_snapshot: 1000_0000000,
+        available_fp: 0,
+        total_fp_contributed: player1_fp,
+    };
+
+    let epoch_player2 = crate::types::EpochPlayer {
+        epoch_faction: Some(0),
+        epoch_balance_snapshot: 2000_0000000,
+        available_fp: 0,
+        total_fp_contributed: player2_fp,
+    };
+
+    env.as_contract(&blendizzard.address, || {
+        crate::storage::set_epoch_player(&env, current_epoch_num, &player1, &epoch_player1);
+        crate::storage::set_epoch_player(&env, current_epoch_num, &player2, &epoch_player2);
     });
 
     // Claim rewards

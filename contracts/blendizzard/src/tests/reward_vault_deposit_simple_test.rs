@@ -6,7 +6,7 @@
 /// We bypass the complex Soroswap setup by directly creating a finalized epoch.
 /// Uses REAL FeeVault to verify actual deposit behavior.
 use super::blend_utils::{create_blend_pool, EnvTestUtils};
-use super::fee_vault_utils::{create_fee_vault, FeeVaultClient};
+use super::fee_vault_utils::create_fee_vault;
 use super::testutils::{create_blendizzard_contract, setup_test_env};
 use crate::types::{EpochInfo, EpochPlayer};
 use blend_contract_sdk::testutils::BlendFixture;
@@ -17,29 +17,44 @@ use soroban_sdk::{vec, Address, Map};
 #[test]
 fn test_claim_reward_goes_to_vault_not_player_wallet() {
     let env = setup_test_env();
+    env.cost_estimate().budget().reset_unlimited();
+    env.mock_all_auths();
+    env.set_default_info();
+
     let admin = Address::generate(&env);
     let player = Address::generate(&env);
 
-    // Setup mock vault
-    let mock_vault_addr = create_mock_vault(&env);
-    let _mock_vault = MockVaultClient::new(&env, &mock_vault_addr);
-
-    // Create USDC token
+    // Create tokens
+    let blnd = env
+        .register_stellar_asset_contract_v2(admin.clone())
+        .address();
     let usdc = env
         .register_stellar_asset_contract_v2(admin.clone())
         .address();
+    let xlm = env
+        .register_stellar_asset_contract_v2(admin.clone())
+        .address();
+
+    let _blnd_client = MockTokenClient::new(&env, &blnd);
     let usdc_client = MockTokenClient::new(&env, &usdc);
+    let xlm_client = MockTokenClient::new(&env, &xlm);
+
+    // Create Blend ecosystem
+    let blend_fixture = BlendFixture::deploy(&env, &admin, &blnd, &usdc);
+    let pool = create_blend_pool(&env, &blend_fixture, &admin, &usdc_client, &xlm_client);
+
+    // Create REAL FeeVault
+    let fee_vault = create_fee_vault(&env, &admin, &pool, &usdc, 0, 100_00000, None);
 
     // Create minimal blendizzard contract (Soroswap not needed for this test)
     let soroswap_router = Address::generate(&env);
-    let blnd_token = Address::generate(&env);
 
     let blendizzard = create_blendizzard_contract(
         &env,
         &admin,
-        &mock_vault_addr,
+        &fee_vault.address,
         &soroswap_router,
-        &blnd_token,
+        &blnd,
         &usdc,
         86400,
         vec![&env, 1],
@@ -83,8 +98,9 @@ fn test_claim_reward_goes_to_vault_not_player_wallet() {
     // Give the blendizzard contract USDC for rewards
     usdc_client.mint(&blendizzard.address, &reward_pool);
 
-    // Track player's USDC balance BEFORE claim
-    let _usdc_before = usdc_client.balance(&player);
+    // Track player's USDC balance and vault shares BEFORE claim
+    let usdc_before = usdc_client.balance(&player);
+    let shares_before = fee_vault.get_shares(&player);
 
     // ACT: Claim reward
     let claimed_amount = blendizzard.claim_epoch_reward(&player, &0);
@@ -97,18 +113,21 @@ fn test_claim_reward_goes_to_vault_not_player_wallet() {
     );
 
     // ASSERT 2: KEY TEST - Player's USDC wallet balance should NOT increase
-    // (because USDC goes from contract → player → vault in the deposit flow)
-    let _usdc_after = usdc_client.balance(&player);
+    // With REAL FeeVault, USDC goes: contract → player → vault
+    let usdc_after = usdc_client.balance(&player);
+    assert_eq!(
+        usdc_after, usdc_before,
+        "Player USDC balance should not change (deposited into vault)"
+    );
 
-    // The mock vault's deposit() just returns the amount (it doesn't actually hold the tokens)
-    // So in practice: USDC goes contract → player → (vault deposit called but mock doesn't store)
-    // The key assertion is that the player's final balance should be the same as before
-    // HOWEVER: Due to how the mock works, USDC temporarily goes to player, then deposit is called
-    // The mock deposit doesn't actually transfer, so player keeps the USDC
-    // In a REAL vault, the USDC would be transferred from player to vault during deposit()
+    // ASSERT 3: Player should have vault shares (proof that deposit happened)
+    let shares_after = fee_vault.get_shares(&player);
+    assert!(
+        shares_after > shares_before,
+        "Player should have received vault shares"
+    );
 
-    // For this test with MockVault, we verify the deposit was CALLED by checking
-    // that the contract balance decreased (USDC was transferred somewhere)
+    // ASSERT 4: Contract balance should have decreased
     let contract_usdc_after = usdc_client.balance(&blendizzard.address);
     assert_eq!(
         contract_usdc_after,
@@ -116,33 +135,52 @@ fn test_claim_reward_goes_to_vault_not_player_wallet() {
         "Contract should have transferred USDC out"
     );
 
-    // In a real integration test with actual FeeVault, we would assert:
-    // assert_eq!(usdc_after, usdc_before, "Player USDC balance should not change");
-    // assert!(vault.get_shares(&player) > 0, "Player should have vault shares");
-
-    // But with MockVault, USDC goes to player and deposit() is called (returning shares)
-    // The mock doesn't actually move tokens, so player ends up with USDC
-    // This is a limitation of the mock, not the actual implementation
+    // ASSERT 5: Player's underlying tokens in vault should equal claimed amount
+    let underlying = fee_vault.get_underlying_tokens(&player);
+    assert!(
+        underlying >= claimed_amount,
+        "Player's vault balance should be at least the claimed amount"
+    );
 }
 
 #[test]
 fn test_cannot_claim_twice() {
     let env = setup_test_env();
+    env.cost_estimate().budget().reset_unlimited();
+    env.mock_all_auths();
+    env.set_default_info();
+
     let admin = Address::generate(&env);
     let player = Address::generate(&env);
 
-    let mock_vault_addr = create_mock_vault(&env);
+    // Create tokens
+    let blnd = env
+        .register_stellar_asset_contract_v2(admin.clone())
+        .address();
     let usdc = env
         .register_stellar_asset_contract_v2(admin.clone())
         .address();
+    let xlm = env
+        .register_stellar_asset_contract_v2(admin.clone())
+        .address();
+
     let usdc_client = MockTokenClient::new(&env, &usdc);
+    let xlm_client = MockTokenClient::new(&env, &xlm);
+
+    // Create Blend ecosystem
+    let blend_fixture = BlendFixture::deploy(&env, &admin, &blnd, &usdc);
+    let pool = create_blend_pool(&env, &blend_fixture, &admin, &usdc_client, &xlm_client);
+
+    // Create REAL FeeVault
+    let fee_vault = create_fee_vault(&env, &admin, &pool, &usdc, 0, 100_00000, None);
+    let soroswap_router = Address::generate(&env);
 
     let blendizzard = create_blendizzard_contract(
         &env,
         &admin,
-        &mock_vault_addr,
-        &Address::generate(&env),
-        &Address::generate(&env),
+        &fee_vault.address,
+        &soroswap_router,
+        &blnd,
         &usdc,
         86400,
         vec![&env, 1],
