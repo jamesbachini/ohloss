@@ -63,8 +63,10 @@ export async function signAndSendViaLaunchtube(
     throw new Error('signTransaction function not available in transaction options');
   }
 
-  const signOpts = {
+  // Build sign options matching AssembledTransaction.sign() pattern
+  const signOpts: any = {
     networkPassphrase: tx.options.networkPassphrase,
+    address: tx.options.address,
   };
 
   const { signedTxXdr, error } = await tx.options.signTransaction(
