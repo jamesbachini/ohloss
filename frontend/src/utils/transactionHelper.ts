@@ -56,9 +56,7 @@ export async function signAndSendViaLaunchtube(
   const correctedTx = TransactionBuilder.cloneFrom(new Transaction(tx.built.toXDR(), NETWORK_PASSPHRASE), {
     fee: resourceFee,
     sorobanData: tx.simulationData.transactionData,
-  })
-    .setTimeout(timeoutSeconds)
-    .build();
+  }).build();
 
   // 3. Sign the corrected transaction manually (bypassing tx.sign())
   if (!tx.options.signTransaction) {
