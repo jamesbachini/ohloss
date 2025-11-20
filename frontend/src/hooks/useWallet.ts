@@ -107,7 +107,7 @@ export function useWallet() {
         if (walletType === 'dev') {
           return await devWalletService.signTransaction(xdr);
         } else {
-          return await walletService.signTransaction(xdr, { address: publicKey });
+          return await walletService.signTransaction(xdr);
         }
       } catch (err) {
         const errorMessage = err instanceof Error ? err.message : 'Failed to sign transaction';
