@@ -480,8 +480,18 @@ export function NumberGuessGame({
 
   const isPlayer1 = gameState && gameState.player1 === userAddress;
   const isPlayer2 = gameState && gameState.player2 === userAddress;
-  const hasGuessed = isPlayer1 ? gameState?.player1_guess !== null && gameState?.player1_guess !== undefined :
-                     isPlayer2 ? gameState?.player2_guess !== null && gameState?.player2_guess !== undefined : false;
+  const isSelfPlay = isPlayer1 && isPlayer2; // Same address playing both sides
+
+  // In self-play mode, hasGuessed is only true when BOTH guesses are made
+  // Otherwise, check the appropriate role
+  const hasGuessed = isSelfPlay
+    ? (gameState?.player1_guess !== null && gameState?.player1_guess !== undefined) &&
+      (gameState?.player2_guess !== null && gameState?.player2_guess !== undefined)
+    : isPlayer1
+      ? gameState?.player1_guess !== null && gameState?.player1_guess !== undefined
+      : isPlayer2
+        ? gameState?.player2_guess !== null && gameState?.player2_guess !== undefined
+        : false;
 
   return (
     <div className="bg-white/70 backdrop-blur-xl rounded-2xl p-8 shadow-xl border-2 border-purple-200">
@@ -528,7 +538,7 @@ export function NumberGuessGame({
       {gamePhase === 'create' && (
         <div className="space-y-6">
           {/* Mode Toggle */}
-          <div className="flex items-center justify-center gap-3 p-2 bg-gray-100 rounded-xl">
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-3 p-2 bg-gray-100 rounded-xl">
             <button
               onClick={() => {
                 setCreateMode('create');
@@ -576,7 +586,7 @@ export function NumberGuessGame({
 
           {createMode === 'create' ? (
             <div className="space-y-6">
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-bold text-gray-700 mb-2">
                 Player 1 (You)
@@ -602,7 +612,7 @@ export function NumberGuessGame({
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-bold text-gray-700 mb-2">
                 Your Wager (FP)
@@ -656,7 +666,7 @@ export function NumberGuessGame({
                       {exportedXDR}
                     </code>
                   </div>
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <button
                       onClick={copyXDRToClipboard}
                       className="py-3 rounded-lg bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 text-white font-bold text-sm transition-all shadow-md hover:shadow-lg transform hover:scale-105"
@@ -773,7 +783,7 @@ export function NumberGuessGame({
                 </ul>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <button
                   onClick={handleLoadExistingGame}
                   disabled={loading || !loadSessionId.trim()}
@@ -800,7 +810,21 @@ export function NumberGuessGame({
       {/* GUESS PHASE */}
       {gamePhase === 'guess' && gameState && (
         <div className="space-y-6">
-          <div className="grid grid-cols-2 gap-4">
+          {isSelfPlay && (
+            <div className="p-4 bg-gradient-to-r from-purple-50 to-pink-50 border-2 border-purple-200 rounded-xl">
+              <p className="text-sm font-semibold text-purple-700">
+                🎭 Self-Play Mode: You are playing against yourself!
+              </p>
+              <p className="text-xs text-gray-600 mt-1">
+                {gameState.player1_guess === null && gameState.player2_guess === null
+                  ? 'Make your first guess (will be assigned to Player 1)'
+                  : gameState.player1_guess !== null && gameState.player2_guess === null
+                    ? 'First guess made! Now make your second guess (will be assigned to Player 2)'
+                    : 'Both guesses made! Waiting to reveal winner...'}
+              </p>
+            </div>
+          )}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className={`p-5 rounded-xl border-2 ${isPlayer1 ? 'border-purple-400 bg-gradient-to-br from-purple-50 to-pink-50 shadow-lg' : 'border-gray-200 bg-white'}`}>
               <div className="text-xs font-bold uppercase tracking-wide text-gray-600 mb-1">Player 1</div>
               <div className="font-mono text-sm font-semibold mb-2 text-gray-800">
@@ -849,7 +873,7 @@ export function NumberGuessGame({
               <label className="block text-sm font-bold text-gray-700">
                 Make Your Guess (1-10)
               </label>
-              <div className="grid grid-cols-5 gap-3">
+              <div className="grid grid-cols-3 sm:grid-cols-5 gap-3">
                 {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((num) => (
                   <button
                     key={num}

@@ -272,20 +272,20 @@ export function Dashboard({ onLogout }: DashboardProps) {
 
       <div className="relative z-10">
       {/* Header */}
-      <header className="mx-6 mt-6 mb-4 bg-white/60 backdrop-blur-2xl rounded-3xl shadow-lg border border-white/60">
-        <div className="px-8 py-6 flex items-center justify-between">
-          <div>
-            <h1 className="text-4xl font-black bg-gradient-to-r from-blue-600 via-purple-600 to-pink-600 bg-clip-text text-transparent mb-1">
+      <header className="mx-3 sm:mx-6 mt-3 sm:mt-6 mb-4 bg-white/60 backdrop-blur-2xl rounded-3xl shadow-lg border border-white/60">
+        <div className="px-4 sm:px-8 py-4 sm:py-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+          <div className="flex-shrink-0">
+            <h1 className="text-2xl sm:text-4xl font-black bg-gradient-to-r from-blue-600 via-purple-600 to-pink-600 bg-clip-text text-transparent mb-1">
               Blendizzard
             </h1>
-            <p className="text-sm font-medium text-gray-500">
+            <p className="text-xs sm:text-sm font-medium text-gray-500">
               Faction Gaming Protocol
             </p>
           </div>
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-3 flex-wrap w-full sm:w-auto">
             <div
               onClick={copyAddressToClipboard}
-              className="text-right bg-gradient-to-br from-blue-50 to-purple-50 px-4 py-3 rounded-2xl border border-blue-100 cursor-pointer hover:border-blue-300 hover:shadow-lg transition-all transform hover:scale-105 group relative"
+              className="text-right bg-gradient-to-br from-blue-50 to-purple-50 px-3 sm:px-4 py-2 sm:py-3 rounded-2xl border border-blue-100 cursor-pointer hover:border-blue-300 hover:shadow-lg transition-all transform hover:scale-105 group relative flex-1 sm:flex-initial"
               title="Click to copy address"
             >
               <div className="text-xs font-semibold text-blue-600 mb-1 flex items-center gap-1.5">
@@ -301,14 +301,14 @@ export function Dashboard({ onLogout }: DashboardProps) {
                 {formatAmount(xlmBalance)} XLM
               </div>
               {addressCopied && (
-                <div className="absolute -top-10 left-1/2 transform -translate-x-1/2 bg-green-600 text-white text-xs font-bold px-3 py-1.5 rounded-lg shadow-lg whitespace-nowrap">
+                <div className="absolute -top-10 left-1/2 transform -translate-x-1/2 bg-green-600 text-white text-xs font-bold px-3 py-1.5 rounded-lg shadow-lg whitespace-nowrap z-50">
                   Copied!
                 </div>
               )}
             </div>
             <button
               onClick={onLogout}
-              className="px-5 py-3 rounded-2xl bg-gradient-to-br from-red-500 to-pink-500 text-white font-semibold hover:from-red-600 hover:to-pink-600 transition-all shadow-lg hover:shadow-xl transform hover:scale-105"
+              className="px-4 sm:px-5 py-2 sm:py-3 rounded-2xl bg-gradient-to-br from-red-500 to-pink-500 text-white text-sm font-semibold hover:from-red-600 hover:to-pink-600 transition-all shadow-lg hover:shadow-xl transform hover:scale-105 whitespace-nowrap"
             >
               Logout
             </button>
@@ -316,9 +316,9 @@ export function Dashboard({ onLogout }: DashboardProps) {
         </div>
       </header>
 
-      <div className="p-4 grid grid-cols-12 gap-4">
+      <div className="p-3 sm:p-4 grid grid-cols-1 lg:grid-cols-12 gap-3 sm:gap-4">
         {/* Left Sidebar - Epoch & Stats */}
-        <div className="col-span-3 space-y-4">
+        <div className="lg:col-span-3 space-y-3 sm:space-y-4">
           <EpochTimer currentEpoch={currentEpoch} onEpochCycled={() => loadDashboardData()} />
           <FactionStandings currentEpoch={currentEpoch} refreshTrigger={standingsRefresh} />
 
@@ -416,7 +416,7 @@ export function Dashboard({ onLogout }: DashboardProps) {
         </div>
 
         {/* Main Content */}
-        <div className="col-span-9 space-y-4">
+        <div className="lg:col-span-9 space-y-3 sm:space-y-4">
           {faction === null ? (
             <FactionSelection userAddress={userAddress} onSuccess={loadDashboardData} />
           ) : (
