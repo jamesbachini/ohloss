@@ -1,7 +1,6 @@
-import { useCallback, useRef } from 'react';
+import { useCallback } from 'react';
 import { useWalletStore } from '@/store/walletSlice';
-import { StellarWalletsKit, WalletNetwork, allowAllModules } from '@creit.tech/stellar-wallets-kit';
-import type { ISupportedWallet } from '@creit.tech/stellar-wallets-kit';
+import * as freighterApi from '@stellar/freighter-api';
 import { devWalletService, DevWalletService } from '@/services/devWalletService';
 import { NETWORK, NETWORK_PASSPHRASE } from '@/utils/constants';
 import type { ContractSigner } from '@/types/signer';
@@ -23,76 +22,38 @@ export function useWallet() {
     disconnect: storeDisconnect,
   } = useWalletStore();
 
-  // v1 uses instance-based API, store the kit instance
-  const kitRef = useRef<StellarWalletsKit | null>(null);
-
   /**
-   * Get or create StellarWalletsKit instance
-   */
-  const getKit = useCallback(() => {
-    if (!kitRef.current) {
-      const walletNetwork = NETWORK.toLowerCase() === 'testnet'
-        ? WalletNetwork.TESTNET
-        : WalletNetwork.PUBLIC;
-
-      kitRef.current = new StellarWalletsKit({
-        network: walletNetwork,
-        modules: allowAllModules(),
-      });
-    }
-    return kitRef.current;
-  }, []);
-
-  /**
-   * Connect to a wallet using the modal
+   * Connect to Freighter wallet
    */
   const connect = useCallback(async () => {
-    return new Promise<void>((resolve, reject) => {
-      try {
-        setConnecting(true);
-        setError(null);
+    try {
+      setConnecting(true);
+      setError(null);
 
-        const kit = getKit();
-
-        // v1 API: openModal with callbacks
-        kit.openModal({
-          onWalletSelected: async (wallet: ISupportedWallet) => {
-            try {
-              kit.setWallet(wallet.id);
-              const { address } = await kit.getAddress();
-
-              // Update store with wallet details
-              setWallet(address, wallet.id, 'wallet');
-              setNetwork(NETWORK, NETWORK_PASSPHRASE);
-              setConnecting(false);
-              resolve();
-            } catch (err) {
-              const errorMessage = err instanceof Error ? err.message : 'Failed to get address';
-              setError(errorMessage);
-              setConnecting(false);
-              reject(err);
-            }
-          },
-          onClosed: (err) => {
-            if (err) {
-              const errorMessage = err instanceof Error ? err.message : 'Modal closed';
-              setError(errorMessage);
-              reject(err);
-            } else {
-              // User closed modal without selecting
-              reject(new Error('Connection cancelled'));
-            }
-            setConnecting(false);
-          },
-        });
-      } catch (err) {
-        const errorMessage = err instanceof Error ? err.message : 'Failed to open modal';
-        setError(errorMessage);
-        setConnecting(false);
-        reject(err);
+      // Check if Freighter is installed
+      const { isConnected: freighterInstalled } = await freighterApi.isConnected();
+      if (!freighterInstalled) {
+        throw new Error('Freighter wallet is not installed');
       }
-    });
-  }, [setWallet, setConnecting, setNetwork, setError, getKit]);
+
+      // Request access to user's public key
+      const { address, error: accessError } = await freighterApi.requestAccess();
+      if (accessError) {
+        throw new Error(accessError.message || 'Failed to connect to Freighter');
+      }
+
+      // Update store with wallet details
+      setWallet(address, 'freighter', 'wallet');
+      setNetwork(NETWORK, NETWORK_PASSPHRASE);
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to connect to Freighter';
+      setError(errorMessage);
+      console.error('Freighter connection error:', err);
+      throw err;
+    } finally {
+      setConnecting(false);
+    }
+  }, [setWallet, setConnecting, setNetwork, setError]);
 
   /**
    * Connect as a dev player (for testing)
@@ -114,6 +75,8 @@ export function useWallet() {
         setError(errorMessage);
         console.error('Dev wallet connection error:', err);
         throw err;
+      } finally {
+        setConnecting(false);
       }
     },
     [setWallet, setConnecting, setNetwork, setError]
@@ -123,10 +86,7 @@ export function useWallet() {
    * Disconnect wallet
    */
   const disconnect = useCallback(async () => {
-    if (walletType === 'wallet' && kitRef.current) {
-      // v1 doesn't have a disconnect method - just clear the reference
-      kitRef.current = null;
-    } else if (walletType === 'dev') {
+    if (walletType === 'dev') {
       devWalletService.disconnect();
     }
     storeDisconnect();
@@ -145,8 +105,7 @@ export function useWallet() {
       // Dev wallet uses the dev wallet service's signer
       return devWalletService.getSigner();
     } else {
-      // Wallet signer calls v1 StellarWalletsKit instance methods
-      const kit = getKit();
+      // Freighter wallet signer
       return {
         signTransaction: async (xdr: string, opts?: {
           networkPassphrase?: string;
@@ -155,30 +114,39 @@ export function useWallet() {
           submitUrl?: string;
         }) => {
           const signingAddress = opts?.address || publicKey;
-          console.log('signingAddress', signingAddress);
-          return await kit.signTransaction(xdr, {
-            networkPassphrase: NETWORK_PASSPHRASE,
+          console.log('signTransaction with address:', signingAddress);
+
+          const result = await freighterApi.signTransaction(xdr, {
+            networkPassphrase: opts?.networkPassphrase || NETWORK_PASSPHRASE,
             address: signingAddress,
           });
+
+          // Return result in the format expected by Stellar SDK
+          return result;
         },
         signAuthEntry: async (authEntry: string, opts?: {
           networkPassphrase?: string;
           address?: string;
         }) => {
           const signingAddress = opts?.address || publicKey;
-          console.log('signingAddress', signingAddress);
-          const result = await kit.signAuthEntry(authEntry, {
-            networkPassphrase: NETWORK_PASSPHRASE,
+          console.log('signAuthEntry with address:', signingAddress);
+
+          const { signedAuthEntry, signerAddress, error } = await freighterApi.signAuthEntry(authEntry, {
+            networkPassphrase: opts?.networkPassphrase || NETWORK_PASSPHRASE,
             address: signingAddress,
           });
+
+          // Return result in the format expected by Stellar SDK
+          // Convert null to empty string and ensure it's a string type
           return {
-            signedAuthEntry: result.signedAuthEntry,
-            signerAddress: result.signerAddress,
+            signedAuthEntry: (signedAuthEntry || '') as string,
+            signerAddress,
+            error,
           };
         },
       };
     }
-  }, [isConnected, publicKey, walletType, getKit]);
+  }, [isConnected, publicKey, walletType]);
 
   /**
    * Check if dev mode is available
@@ -195,10 +163,18 @@ export function useWallet() {
   }, []);
 
   /**
-   * Get the install link for wallet extension
+   * Get the install link for Freighter extension
    */
   const getInstallLink = useCallback(() => {
     return 'https://www.freighter.app/';
+  }, []);
+
+  /**
+   * Check if Freighter is installed
+   */
+  const checkFreighterInstalled = useCallback(async () => {
+    const { isConnected: installed } = await freighterApi.isConnected();
+    return installed;
   }, []);
 
   return {
@@ -220,5 +196,6 @@ export function useWallet() {
     isDevModeAvailable,
     isDevPlayerAvailable,
     getInstallLink,
+    checkFreighterInstalled,
   };
 }
