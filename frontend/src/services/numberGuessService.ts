@@ -342,6 +342,11 @@ export class NumberGuessService {
       player2Wager: player2Wager.toString(),
     });
 
+    // Validation: Prevent self-play at service layer
+    if (player2Address === gameParams.player1) {
+      throw new Error('Cannot play against yourself. Player 2 must be different from Player 1.');
+    }
+
     // Step 1: Build a new transaction with Player 2 as the source
     // Use parsed parameters from auth entry + provided Player 2 params
     const buildClient = new NumberGuessClient({

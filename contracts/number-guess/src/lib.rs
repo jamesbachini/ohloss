@@ -133,6 +133,11 @@ impl NumberGuessContract {
         player1_wager: i128,
         player2_wager: i128,
     ) -> Result<(), Error> {
+        // Prevent self-play: Player 1 and Player 2 must be different
+        if player1 == player2 {
+            panic!("Cannot play against yourself: Player 1 and Player 2 must be different addresses");
+        }
+
         // Require authentication from both players (they consent to wagering FP)
         player1.require_auth_for_args(vec![&env, session_id.into_val(&env), player1_wager.into_val(&env)]);
         player2.require_auth_for_args(vec![&env, session_id.into_val(&env), player2_wager.into_val(&env)]);

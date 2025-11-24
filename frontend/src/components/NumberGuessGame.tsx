@@ -45,6 +45,9 @@ export function NumberGuessGame({
   const [loadSessionId, setLoadSessionId] = useState('');
   const [authEntryCopied, setAuthEntryCopied] = useState(false);
   const [shareUrlCopied, setShareUrlCopied] = useState(false);
+  const [xdrParsing, setXdrParsing] = useState(false);
+  const [xdrParseError, setXdrParseError] = useState<string | null>(null);
+  const [xdrParseSuccess, setXdrParseSuccess] = useState(false);
 
   const FP_DECIMALS = 7;
 
@@ -238,6 +241,65 @@ export function NumberGuessGame({
     }
   }, [initialXDR, initialSessionId]);
 
+  // Auto-parse Auth Entry XDR when pasted
+  useEffect(() => {
+    // Only parse if in import mode and XDR is not empty
+    if (createMode !== 'import' || !importAuthEntryXDR.trim()) {
+      // Reset parse states when XDR is cleared
+      if (!importAuthEntryXDR.trim()) {
+        setXdrParsing(false);
+        setXdrParseError(null);
+        setXdrParseSuccess(false);
+        setImportSessionId('');
+        setImportPlayer1('');
+        setImportPlayer1Wager('');
+      }
+      return;
+    }
+
+    // Auto-parse the XDR
+    const parseXDR = async () => {
+      setXdrParsing(true);
+      setXdrParseError(null);
+      setXdrParseSuccess(false);
+
+      try {
+        console.log('[Auto-Parse] Parsing auth entry XDR...');
+        const gameParams = numberGuessService.parseAuthEntry(importAuthEntryXDR.trim());
+
+        // Check if user is trying to import their own auth entry (self-play prevention)
+        if (gameParams.player1 === userAddress) {
+          throw new Error('You cannot play against yourself. This auth entry was created by you (Player 1).');
+        }
+
+        // Successfully parsed - auto-fill fields
+        setImportSessionId(gameParams.sessionId.toString());
+        setImportPlayer1(gameParams.player1);
+        setImportPlayer1Wager((Number(gameParams.player1Wager) / 10_000_000).toString());
+        setXdrParseSuccess(true);
+        console.log('[Auto-Parse] Successfully parsed auth entry:', {
+          sessionId: gameParams.sessionId,
+          player1: gameParams.player1,
+          player1Wager: (Number(gameParams.player1Wager) / 10_000_000).toString(),
+        });
+      } catch (err) {
+        console.error('[Auto-Parse] Failed to parse auth entry:', err);
+        const errorMsg = err instanceof Error ? err.message : 'Invalid auth entry XDR';
+        setXdrParseError(errorMsg);
+        // Clear auto-filled fields on error
+        setImportSessionId('');
+        setImportPlayer1('');
+        setImportPlayer1Wager('');
+      } finally {
+        setXdrParsing(false);
+      }
+    };
+
+    // Debounce parsing to avoid parsing on every keystroke
+    const timeoutId = setTimeout(parseXDR, 500);
+    return () => clearTimeout(timeoutId);
+  }, [importAuthEntryXDR, createMode, userAddress]);
+
   const handlePrepareTransaction = async () => {
     try {
       setLoading(true);
@@ -369,6 +431,12 @@ export function NumberGuessGame({
       // Verify the user is Player 2 (prevent self-play)
       if (gameParams.player1 === userAddress) {
         throw new Error('Invalid game: You cannot play against yourself (you are Player 1 in this auth entry)');
+      }
+
+      // Additional validation: Ensure Player 2 address is different from Player 1
+      // (In case user manually edits the Player 2 field)
+      if (userAddress === gameParams.player1) {
+        throw new Error('Cannot play against yourself. Player 2 must be different from Player 1.');
       }
 
       const signer = getContractSigner();
@@ -797,42 +865,36 @@ export function NumberGuessGame({
                 </p>
                 <div className="space-y-3">
                   <div>
-                    <label className="block text-xs font-bold text-gray-700 mb-1">Auth Entry XDR</label>
+                    <label className="block text-xs font-bold text-gray-700 mb-1 flex items-center gap-2">
+                      Auth Entry XDR
+                      {xdrParsing && (
+                        <span className="text-blue-500 text-xs animate-pulse">Parsing...</span>
+                      )}
+                      {xdrParseSuccess && (
+                        <span className="text-green-600 text-xs">✓ Parsed successfully</span>
+                      )}
+                      {xdrParseError && (
+                        <span className="text-red-600 text-xs">✗ Parse failed</span>
+                      )}
+                    </label>
                     <textarea
                       value={importAuthEntryXDR}
-                      onChange={(e) => {
-                        const authEntryXdr = e.target.value;
-                        setImportAuthEntryXDR(authEntryXdr);
-
-                        // Try to parse and auto-fill when auth entry is pasted
-                        if (authEntryXdr.trim().length > 50) {
-                          try {
-                            const parsed = numberGuessService.parseAuthEntry(authEntryXdr.trim());
-                            // Auto-populate the read-only fields
-                            setImportSessionId(parsed.sessionId.toString());
-                            setImportPlayer1(parsed.player1);
-                            setImportPlayer1Wager((Number(parsed.player1Wager) / 10_000_000).toString());
-                            // Prefill Player 2 wager with default 0.1
-                            setImportPlayer2Wager('0.1');
-                            console.log('✅ Auto-filled from auth entry:', parsed);
-                          } catch (err: any) {
-                            // Clear fields if parsing fails
-                            setImportSessionId('');
-                            setImportPlayer1('');
-                            setImportPlayer1Wager('');
-                            console.log('⚠️ Unable to parse auth entry (will retry on import):', err.message);
-                          }
-                        } else {
-                          // Clear fields if auth entry is too short
-                          setImportSessionId('');
-                          setImportPlayer1('');
-                          setImportPlayer1Wager('');
-                        }
-                      }}
+                      onChange={(e) => setImportAuthEntryXDR(e.target.value)}
                       placeholder="Paste Player 1's signed auth entry XDR here..."
                       rows={4}
-                      className="w-full px-4 py-3 rounded-xl bg-white border-2 border-blue-200 focus:outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100 text-xs font-mono resize-none"
+                      className={`w-full px-4 py-3 rounded-xl bg-white border-2 focus:outline-none focus:ring-4 text-xs font-mono resize-none transition-colors ${
+                        xdrParseError
+                          ? 'border-red-300 focus:border-red-400 focus:ring-red-100'
+                          : xdrParseSuccess
+                          ? 'border-green-300 focus:border-green-400 focus:ring-green-100'
+                          : 'border-blue-200 focus:border-blue-400 focus:ring-blue-100'
+                      }`}
                     />
+                    {xdrParseError && (
+                      <p className="text-xs text-red-600 font-semibold mt-1">
+                        {xdrParseError}
+                      </p>
+                    )}
                   </div>
                   {/* Auto-populated fields from auth entry (read-only) */}
                   <div className="grid grid-cols-2 gap-3">
