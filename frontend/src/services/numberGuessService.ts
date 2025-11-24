@@ -1,8 +1,9 @@
 import { Client as NumberGuessClient, type Game } from 'number-guess';
 import { GAME_CONTRACT, NETWORK_PASSPHRASE, RPC_URL, DEFAULT_METHOD_OPTIONS, DEFAULT_AUTH_TTL_MINUTES, MULTI_SIG_AUTH_TTL_MINUTES } from '@/utils/constants';
-import { contract, TransactionBuilder, StrKey } from '@stellar/stellar-sdk';
+import { contract, TransactionBuilder, StrKey, xdr, Address, authorizeEntry } from '@stellar/stellar-sdk';
 import { signAndSendViaLaunchtube } from '@/utils/transactionHelper';
 import { calculateValidUntilLedger } from '@/utils/ledgerUtils';
+import { extractSignedAuthEntry, injectSignedAuthEntry } from '@/utils/authEntryUtils';
 
 type ClientOptions = contract.ClientOptions;
 
@@ -40,11 +41,26 @@ export class NumberGuessService {
 
   /**
    * Get game state
+   * Returns null if game doesn't exist (instead of throwing)
    */
-  async getGame(sessionId: number): Promise<Game> {
-    const tx = await this.baseClient.get_game({ session_id: sessionId });
-    const result = await tx.simulate();
-    return result.result.unwrap();
+  async getGame(sessionId: number): Promise<Game | null> {
+    try {
+      const tx = await this.baseClient.get_game({ session_id: sessionId });
+      const result = await tx.simulate();
+
+      // Check if result is Ok before unwrapping
+      if (result.result.isOk()) {
+        return result.result.unwrap();
+      } else {
+        // Game doesn't exist or contract returned error
+        console.log('[getGame] Game not found for session:', sessionId);
+        return null;
+      }
+    } catch (err) {
+      // Simulation or contract call failed
+      console.log('[getGame] Error querying game:', err);
+      return null;
+    }
   }
 
   /**
@@ -78,15 +94,15 @@ export class NumberGuessService {
   }
 
   /**
-   * STEP 1 (Player 1): Prepare a start game transaction
+   * STEP 1 (Player 1): Prepare a start game transaction and export signed auth entry
    * - Creates transaction with Player 2 as the transaction source
-   * - Player 1 discovers what needs to be signed using needsNonInvokerSigningBy()
-   * - Player 1 signs their part (likely auth entry since they're not the source)
-   * - Returns partially-signed XDR for Player 2 to import and complete
+   * - Simulates to get auth entries
+   * - Player 1 signs their auth entry
+   * - Returns ONLY Player 1's signed auth entry XDR (not full transaction)
    *
    * Uses extended TTL (60 minutes) for multi-sig flow to allow time for both players to sign
    *
-   * Based on pattern from stellar-sdk swap.test.ts multi-auth flow
+   * Player 2 will later import this auth entry and rebuild the transaction
    */
   async prepareStartGame(
     sessionId: number,
@@ -97,13 +113,12 @@ export class NumberGuessService {
     player1Signer: Pick<contract.ClientOptions, 'signTransaction' | 'signAuthEntry'>,
     authTtlMinutes?: number
   ): Promise<string> {
-    // Step 1: Build transaction with Player 2 as the source
-    // Use a client without signer just for building
+    // Step 1: Build transaction with Player 2 as the source (no signing capabilities needed yet)
     const buildClient = new NumberGuessClient({
       contractId: GAME_CONTRACT,
       networkPassphrase: NETWORK_PASSPHRASE,
       rpcUrl: RPC_URL,
-      publicKey: player2, // Player 2 will be the transaction source
+      publicKey: player2, // Player 2 is the transaction source
     });
 
     const tx = await buildClient.start_game({
@@ -113,68 +128,283 @@ export class NumberGuessService {
       player1_wager: player1Wager,
       player2_wager: player2Wager,
     }, DEFAULT_METHOD_OPTIONS);
+    // NOTE: Contract methods automatically simulate - no need to call tx.simulate() again!
+    console.log('[prepareStartGame] Transaction built and simulated, extracting auth entries');
 
-    // Step 2: Player 1 imports and signs what they need to sign
-    const player1Client = this.createSigningClient(player1, player1Signer);
-    const player1Tx = player1Client.txFromXDR(tx.toXDR());
+    // Step 2: Extract Player 1's STUBBED auth entry from simulation
+    if (!tx.simulationData?.result?.auth) {
+      throw new Error('No auth entries found in simulation');
+    }
 
-    // Discover what Player 1 needs to sign
-    const needsSigning = await player1Tx.needsNonInvokerSigningBy();
-    console.log('Accounts that need to sign auth entries:', needsSigning);
+    const authEntries = tx.simulationData.result.auth;
+    console.log('[prepareStartGame] Found', authEntries.length, 'auth entries in simulation');
 
-    // Calculate extended TTL for multi-sig flow
+    // Find Player 1's stubbed auth entry
+    let player1AuthEntry = null;
+
+    console.log('[prepareStartGame] Looking for auth entry for Player 1:', player1);
+
+    for (let i = 0; i < authEntries.length; i++) {
+      const entry = authEntries[i];
+      try {
+        const entryAddress = entry.credentials().address().address();
+        const entryAddressString = Address.fromScAddress(entryAddress).toString();
+
+        console.log(`[prepareStartGame] Auth entry ${i} address:`, entryAddressString);
+
+        // Compare string addresses instead of using .equals() which doesn't exist on ScAddress
+        if (entryAddressString === player1) {
+          player1AuthEntry = entry;
+          console.log(`[prepareStartGame] Found Player 1 auth entry at index ${i}`);
+          break;
+        }
+      } catch (err) {
+        console.log(`[prepareStartGame] Auth entry ${i} doesn't have address credentials:`, err);
+        continue;
+      }
+    }
+
+    if (!player1AuthEntry) {
+      throw new Error(`No auth entry found for Player 1 (${player1}). Found ${authEntries.length} auth entries in simulation - check console logs for details.`);
+    }
+
+    // Step 4: Calculate extended TTL for multi-sig flow
     const validUntilLedgerSeq = authTtlMinutes
       ? await calculateValidUntilLedger(RPC_URL, authTtlMinutes)
       : await calculateValidUntilLedger(RPC_URL, MULTI_SIG_AUTH_TTL_MINUTES);
 
-    // Player 1 signs if they're in the needsSigning list
-    if (needsSigning.includes(player1)) {
-      await player1Tx.signAuthEntries({ expiration: validUntilLedgerSeq });
+    // Step 5: Sign the auth entry using authorizeEntry helper
+    // This properly handles the signature generation and auth entry reconstruction
+    console.log('[prepareStartGame] Signing Player 1 auth entry with expiration:', validUntilLedgerSeq);
+
+    if (!player1Signer.signAuthEntry) {
+      throw new Error('signAuthEntry function not available');
     }
 
-    // Export partially-signed XDR for Player 2
-    return player1Tx.toXDR();
+    // Use authorizeEntry to handle the full signing process
+    // This is the proper way to sign auth entries according to stellar-sdk
+    const signedAuthEntry = await authorizeEntry(
+      player1AuthEntry,  // The stubbed entry from simulation (with void signature)
+      async (preimage) => {
+        // The preimage is what needs to be signed
+        // Call wallet to sign the preimage hash
+        console.log('[prepareStartGame] Signing preimage with wallet...');
+        const signResult = await player1Signer.signAuthEntry(
+          preimage.toXDR('base64'),  // Preimage as base64 XDR
+          {
+            networkPassphrase: NETWORK_PASSPHRASE,
+            address: player1,
+          }
+        );
+
+        if (signResult.error) {
+          throw new Error(`Failed to sign auth entry: ${signResult.error.message}`);
+        }
+
+        console.log('[prepareStartGame] Got signature from wallet');
+
+        // Return signature as Buffer (authorizeEntry expects a Buffer)
+        return Buffer.from(signResult.signedAuthEntry, 'base64');
+      },
+      validUntilLedgerSeq,  // Signature expiration ledger
+      NETWORK_PASSPHRASE,
+    );
+
+    // authorizeEntry returns the fully reconstructed auth entry with the signature
+    const signedAuthEntryXdr = signedAuthEntry.toXDR('base64');
+    console.log('[prepareStartGame] ✅ Successfully signed and exported Player 1 auth entry XDR (length:', signedAuthEntryXdr.length, ')');
+    return signedAuthEntryXdr;
   }
 
   /**
-   * STEP 2 (Player 2): Import transaction, check and sign auth entry if needed
-   * - Imports the XDR from Player 1
-   * - Checks if Player 2 needs to sign an auth entry using needsNonInvokerSigningBy()
-   * - If Player 2 is the transaction source, they may not need an auth entry
-   *   (authorization comes from source_account credential)
-   * - Returns updated XDR or original if no signing needed
+   * Parse a signed auth entry to extract game parameters
+   *
+   * Auth entries from require_auth_for_args only contain the args that player is authorizing:
+   * - Player address (from credentials)
+   * - Session ID (arg 0)
+   * - Player's wager (arg 1)
+   */
+  parseAuthEntry(authEntryXdr: string): {
+    sessionId: number;
+    player1: string;
+    player1Wager: bigint;
+    functionName: string;
+  } {
+    try {
+      // Parse the auth entry from XDR
+      const authEntry = xdr.SorobanAuthorizationEntry.fromXDR(authEntryXdr, 'base64');
+
+      console.log('[parseAuthEntry] Parsed auth entry from XDR');
+
+      // Extract Player 1's address from credentials
+      const credentials = authEntry.credentials();
+      console.log('[parseAuthEntry] Credentials type:', credentials.switch().name);
+
+      const addressCreds = credentials.address();
+      const player1Address = addressCreds.address();
+      const player1 = Address.fromScAddress(player1Address).toString();
+      console.log('[parseAuthEntry] Player 1 address:', player1);
+
+      // Get the root invocation
+      const rootInvocation = authEntry.rootInvocation();
+      console.log('[parseAuthEntry] Got root invocation');
+
+      // Get the authorized function
+      const authorizedFunction = rootInvocation.function();
+      console.log('[parseAuthEntry] Authorized function type:', authorizedFunction.switch().name);
+
+      // Extract the contract function invocation
+      const contractFn = authorizedFunction.contractFn();
+      console.log('[parseAuthEntry] Got contract function');
+
+      // Get function name and args
+      const functionName = contractFn.functionName().toString();
+      console.log('[parseAuthEntry] Function name:', functionName);
+
+      if (functionName !== 'start_game') {
+        throw new Error(`Unexpected function: ${functionName}. Expected start_game.`);
+      }
+
+      // Extract arguments from the invocation
+      // For start_game with require_auth_for_args, we have:
+      // 0: session_id (u32)
+      // 1: player_wager (i128)
+      const args = contractFn.args();
+      console.log('[parseAuthEntry] Number of args:', args.length);
+
+      if (args.length !== 2) {
+        throw new Error(`Expected 2 arguments for start_game auth entry, got ${args.length}`);
+      }
+
+      const sessionId = args[0].u32();
+      const player1Wager = args[1].i128().lo().toBigInt();
+
+      console.log('[parseAuthEntry] Extracted:', {
+        sessionId,
+        player1,
+        player1Wager: player1Wager.toString(),
+      });
+
+      return {
+        sessionId,
+        player1,
+        player1Wager,
+        functionName,
+      };
+    } catch (err: any) {
+      console.error('[parseAuthEntry] Error parsing auth entry:', err);
+      throw new Error(`Failed to parse auth entry: ${err.message}`);
+    }
+  }
+
+  /**
+   * STEP 2 (Player 2): Import Player 1's signed auth entry and rebuild transaction
+   * - Parses Player 1's signed auth entry to extract game parameters
+   * - Validates that the current user is Player 2
+   * - Rebuilds the transaction with Player 2 as source
+   * - Injects Player 1's signed auth entry (replacing the stub)
+   * - Signs Player 2's auth entry if needed
+   * - Returns full transaction XDR ready for finalizeStartGame
    *
    * Uses extended TTL (60 minutes) for multi-sig flow to allow time for both players to sign
    *
-   * Player 2 should review session ID and wager amounts before signing
+   * @param player1SignedAuthEntryXdr - The signed auth entry from Player 1
+   * @param player2Address - Player 2's address (the importer, must match auth entry)
+   * @param player2Wager - The wager amount Player 2 wants to set (for validation/override)
+   * @param player2Signer - Player 2's signing capabilities
+   * @param authTtlMinutes - Optional custom TTL (defaults to 60 minutes)
    */
   async importAndSignAuthEntry(
-    xdr: string,
+    player1SignedAuthEntryXdr: string,
     player2Address: string,
+    player2Wager: bigint,
     player2Signer: Pick<contract.ClientOptions, 'signTransaction' | 'signAuthEntry'>,
     authTtlMinutes?: number
   ): Promise<string> {
-    const client = this.createSigningClient(player2Address, player2Signer);
+    console.log('[importAndSignAuthEntry] Parsing Player 1 signed auth entry...');
 
-    // Import the transaction from XDR
-    const tx = client.txFromXDR(xdr);
+    // Parse the auth entry to extract game parameters
+    const gameParams = this.parseAuthEntry(player1SignedAuthEntryXdr);
 
-    // Check if Player 2 needs to sign an auth entry
-    const needsSigning = await tx.needsNonInvokerSigningBy();
-    console.log('Accounts that still need to sign auth entries:', needsSigning);
+    console.log('[importAndSignAuthEntry] Parsed game parameters:', {
+      sessionId: gameParams.sessionId,
+      player1: gameParams.player1,
+      player1Wager: gameParams.player1Wager.toString(),
+    });
+
+    console.log('[importAndSignAuthEntry] Rebuilding transaction with Player 2 params:', {
+      player2: player2Address,
+      player2Wager: player2Wager.toString(),
+    });
+
+    // Step 1: Build a new transaction with Player 2 as the source
+    // Use parsed parameters from auth entry + provided Player 2 params
+    const buildClient = new NumberGuessClient({
+      contractId: GAME_CONTRACT,
+      networkPassphrase: NETWORK_PASSPHRASE,
+      rpcUrl: RPC_URL,
+      publicKey: player2Address, // Player 2 is the transaction source
+    });
+
+    const tx = await buildClient.start_game({
+      session_id: gameParams.sessionId,
+      player1: gameParams.player1,        // From auth entry
+      player2: player2Address,             // Provided by Player 2
+      player1_wager: gameParams.player1Wager, // From auth entry
+      player2_wager: player2Wager,         // Provided by Player 2
+    }, DEFAULT_METHOD_OPTIONS);
+    // NOTE: Contract methods automatically simulate - no need to call tx.simulate() again!
+
+    // Log simulation data to understand what we have
+    console.log('[importAndSignAuthEntry] Transaction built and simulated');
+    console.log('[importAndSignAuthEntry] Has simulation data:', !!tx.simulationData);
+    console.log('[importAndSignAuthEntry] Has result:', !!tx.simulationData?.result);
+    console.log('[importAndSignAuthEntry] Has auth entries:', !!tx.simulationData?.result?.auth);
+
+    if (tx.simulationData?.result?.auth) {
+      const authEntries = tx.simulationData.result.auth;
+      console.log(`[importAndSignAuthEntry] Found ${authEntries.length} auth entries in simulation:`);
+      for (let i = 0; i < authEntries.length; i++) {
+        try {
+          const entryAddress = authEntries[i].credentials().address().address();
+          const entryAddressString = Address.fromScAddress(entryAddress).toString();
+          const signatureType = authEntries[i].credentials().address().signature().switch().name;
+          console.log(`  [${i}] ${entryAddressString} - signature: ${signatureType}`);
+        } catch (err: any) {
+          console.log(`  [${i}] Error reading entry:`, err.message);
+        }
+      }
+    } else {
+      console.log('[importAndSignAuthEntry] ⚠️ No auth entries in simulation data!');
+    }
+    console.log();
+
+    // Step 2: Inject Player 1's signed auth entry (replacing the stub)
+    const txWithInjectedAuth = injectSignedAuthEntry(tx, player1SignedAuthEntryXdr, gameParams.player1);
+    console.log('[importAndSignAuthEntry] Injected Player 1 signed auth entry');
+
+    // Step 4: Create a signing client and import the transaction
+    const player2Client = this.createSigningClient(player2Address, player2Signer);
+    const player2Tx = player2Client.txFromXDR(txWithInjectedAuth.toXDR());
+
+    // Step 5: Check if Player 2 needs to sign an auth entry
+    const needsSigning = await player2Tx.needsNonInvokerSigningBy();
+    console.log('[importAndSignAuthEntry] Accounts that still need to sign auth entries:', needsSigning);
 
     // Calculate extended TTL for multi-sig flow (should match prepareStartGame)
     const validUntilLedgerSeq = authTtlMinutes
       ? await calculateValidUntilLedger(RPC_URL, authTtlMinutes)
       : await calculateValidUntilLedger(RPC_URL, MULTI_SIG_AUTH_TTL_MINUTES);
 
-    // Player 2 signs their auth entry only if they're in the needsSigning list
+    // Player 2 signs their auth entry if they're in the needsSigning list
     if (needsSigning.includes(player2Address)) {
-      await tx.signAuthEntries({ expiration: validUntilLedgerSeq });
+      console.log('[importAndSignAuthEntry] Signing Player 2 auth entry');
+      await player2Tx.signAuthEntries({ expiration: validUntilLedgerSeq });
     }
 
-    // Export updated XDR
-    return tx.toXDR();
+    // Export full transaction XDR (with both auth entries signed)
+    console.log('[importAndSignAuthEntry] Returning full transaction XDR ready for submission');
+    return player2Tx.toXDR();
   }
 
   /**
@@ -332,9 +562,7 @@ export class NumberGuessService {
       player: playerAddress,
       guess,
     }, DEFAULT_METHOD_OPTIONS);
-
-    // Simulate to ensure proper footprint
-    await tx.simulate();
+    // NOTE: Contract methods automatically simulate - footprint is already prepared
 
     const validUntilLedgerSeq = authTtlMinutes
       ? await calculateValidUntilLedger(RPC_URL, authTtlMinutes)
@@ -368,10 +596,8 @@ export class NumberGuessService {
   ) {
     const client = this.createSigningClient(callerAddress, signer);
     const tx = await client.reveal_winner({ session_id: sessionId }, DEFAULT_METHOD_OPTIONS);
-
-    // CRITICAL: Simulate explicitly to ensure footprint includes all storage keys
-    // The reveal_winner function calls blendizzard.end_game() which accesses EpochPlayer data
-    await tx.simulate();
+    // NOTE: Contract methods automatically simulate - footprint already includes all required storage keys
+    // (reveal_winner calls blendizzard.end_game() which accesses EpochPlayer data)
 
     const validUntilLedgerSeq = authTtlMinutes
       ? await calculateValidUntilLedger(RPC_URL, authTtlMinutes)

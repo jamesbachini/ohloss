@@ -38,19 +38,16 @@ export function NumberGuessGame({
   const [success, setSuccess] = useState<string | null>(null);
   const [gamePhase, setGamePhase] = useState<'create' | 'guess' | 'reveal' | 'complete'>('create');
   const [createMode, setCreateMode] = useState<'create' | 'import' | 'load'>('create');
-  const [exportedXDR, setExportedXDR] = useState<string | null>(null);
-  const [importXDR, setImportXDR] = useState('');
+  const [exportedAuthEntryXDR, setExportedAuthEntryXDR] = useState<string | null>(null);
+  const [importAuthEntryXDR, setImportAuthEntryXDR] = useState('');
+  const [importSessionId, setImportSessionId] = useState('');
+  const [importPlayer1, setImportPlayer1] = useState('');
+  const [importPlayer2, setImportPlayer2] = useState('');
+  const [importPlayer1Wager, setImportPlayer1Wager] = useState('');
+  const [importPlayer2Wager, setImportPlayer2Wager] = useState('');
   const [loadSessionId, setLoadSessionId] = useState('');
-  const [xdrCopied, setXdrCopied] = useState(false);
+  const [authEntryCopied, setAuthEntryCopied] = useState(false);
   const [shareUrlCopied, setShareUrlCopied] = useState(false);
-  const [xdrDetails, setXdrDetails] = useState<{
-    sessionId: number;
-    player1: string;
-    player2: string;
-    player1Wager: bigint;
-    player2Wager: bigint;
-    transactionSource: string;
-  } | null>(null);
 
   const FP_DECIMALS = 7;
 
@@ -108,37 +105,141 @@ export function NumberGuessGame({
     }
   }, [gamePhase, gameState?.winner]);
 
-  // Handle initial values from URL deep linking
+  // Handle initial values from URL deep linking or props
+  // Expected URL formats:
+  //   - With auth entry: ?game=number-guess&auth=AAAA... (Session ID, P1 address, P1 wager parsed from auth entry)
+  //   - With session ID: ?game=number-guess&session-id=123 (Load existing game)
+  // Note: GamesCatalog cleans URL params, so we prioritize props over URL
   useEffect(() => {
+    // Priority 1: Check initialXDR prop (from GamesCatalog after URL cleanup)
     if (initialXDR) {
-      console.log('Auto-populating XDR from URL');
-      setCreateMode('import');
-      setImportXDR(initialXDR);
+      console.log('[Deep Link] Using initialXDR prop from GamesCatalog');
+
+      try {
+        const parsed = numberGuessService.parseAuthEntry(initialXDR);
+        const sessionId = parsed.sessionId;
+
+        console.log('[Deep Link] Parsed session ID from initialXDR:', sessionId);
+
+        // Check if game already exists (both players have signed)
+        numberGuessService.getGame(sessionId)
+          .then((game) => {
+            if (game) {
+              // Game exists! Load it directly instead of going to import mode
+              console.log('[Deep Link] Game already exists, loading directly to guess phase');
+              console.log('[Deep Link] Game data:', game);
+
+              // Auto-load the game - bypass create phase entirely
+              setGameState(game);
+              setGamePhase('guess');
+              setSessionId(sessionId); // Set session ID for the game
+            } else {
+              // Game doesn't exist yet, go to import mode
+              console.log('[Deep Link] Game not found, entering import mode');
+              setCreateMode('import');
+              setImportAuthEntryXDR(initialXDR);
+              setImportSessionId(sessionId.toString());
+              setImportPlayer1(parsed.player1);
+              setImportPlayer1Wager((Number(parsed.player1Wager) / 10_000_000).toString());
+              setImportPlayer2Wager('0.1');
+            }
+          })
+          .catch((err) => {
+            console.error('[Deep Link] Error checking game existence:', err);
+            console.error('[Deep Link] Error details:', {
+              message: err?.message,
+              stack: err?.stack,
+              sessionId: sessionId,
+            });
+            // If we can't check, default to import mode
+            setCreateMode('import');
+            setImportAuthEntryXDR(initialXDR);
+            setImportSessionId(parsed.sessionId.toString());
+            setImportPlayer1(parsed.player1);
+            setImportPlayer1Wager((Number(parsed.player1Wager) / 10_000_000).toString());
+            setImportPlayer2Wager('0.1');
+          });
+      } catch (err) {
+        console.log('[Deep Link] Failed to parse initialXDR, will retry on import');
+        setCreateMode('import');
+        setImportAuthEntryXDR(initialXDR);
+        setImportPlayer2Wager('0.1');
+      }
+      return; // Exit early - we processed initialXDR
     }
 
-    if (initialSessionId !== null && initialSessionId !== undefined) {
-      console.log('Auto-populating session ID from URL:', initialSessionId);
+    // Priority 2: Check URL parameters (for direct navigation without GamesCatalog)
+    const urlParams = new URLSearchParams(window.location.search);
+    const authEntry = urlParams.get('auth');
+    const urlSessionId = urlParams.get('session-id');
+
+    if (authEntry) {
+      // Simplified URL format - only auth entry is needed
+      // Session ID, Player 1 address, and wager are parsed from auth entry
+      console.log('[Deep Link] Auto-populating game from URL with auth entry');
+
+      // Try to parse auth entry to get session ID
+      try {
+        const parsed = numberGuessService.parseAuthEntry(authEntry);
+        const sessionId = parsed.sessionId;
+
+        console.log('[Deep Link] Parsed session ID from URL auth entry:', sessionId);
+
+        // Check if game already exists (both players have signed)
+        numberGuessService.getGame(sessionId)
+          .then((game) => {
+            if (game) {
+              // Game exists! Load it directly instead of going to import mode
+              console.log('[Deep Link] Game already exists (URL), loading directly to guess phase');
+              console.log('[Deep Link] Game data:', game);
+
+              // Auto-load the game - bypass create phase entirely
+              setGameState(game);
+              setGamePhase('guess');
+              setSessionId(sessionId); // Set session ID for the game
+            } else {
+              // Game doesn't exist yet, go to import mode
+              console.log('[Deep Link] Game not found (URL), entering import mode');
+              setCreateMode('import');
+              setImportAuthEntryXDR(authEntry);
+              setImportSessionId(sessionId.toString());
+              setImportPlayer1(parsed.player1);
+              setImportPlayer1Wager((Number(parsed.player1Wager) / 10_000_000).toString());
+              setImportPlayer2Wager('0.1');
+            }
+          })
+          .catch((err) => {
+            console.error('[Deep Link] Error checking game existence (URL):', err);
+            console.error('[Deep Link] Error details:', {
+              message: err?.message,
+              stack: err?.stack,
+              sessionId: sessionId,
+            });
+            // If we can't check, default to import mode
+            setCreateMode('import');
+            setImportAuthEntryXDR(authEntry);
+            setImportSessionId(parsed.sessionId.toString());
+            setImportPlayer1(parsed.player1);
+            setImportPlayer1Wager((Number(parsed.player1Wager) / 10_000_000).toString());
+            setImportPlayer2Wager('0.1');
+          });
+      } catch (err) {
+        console.log('[Deep Link] Failed to parse auth entry from URL, will retry on import');
+        setCreateMode('import');
+        setImportAuthEntryXDR(authEntry);
+        setImportPlayer2Wager('0.1');
+      }
+    } else if (urlSessionId) {
+      // Load existing game by session ID
+      console.log('[Deep Link] Auto-populating game from URL with session ID');
+      setCreateMode('load');
+      setLoadSessionId(urlSessionId);
+    } else if (initialSessionId !== null && initialSessionId !== undefined) {
+      console.log('[Deep Link] Auto-populating session ID from prop:', initialSessionId);
       setCreateMode('load');
       setLoadSessionId(initialSessionId.toString());
     }
   }, [initialXDR, initialSessionId]);
-
-  // Parse XDR details when import XDR changes
-  useEffect(() => {
-    if (importXDR.trim()) {
-      try {
-        const details = numberGuessService.parseTransactionXDR(importXDR.trim());
-        setXdrDetails(details);
-        setError(null);
-      } catch (err) {
-        console.error('Failed to parse XDR:', err);
-        setXdrDetails(null);
-        // Don't set error here, only when they try to import
-      }
-    } else {
-      setXdrDetails(null);
-    }
-  }, [importXDR]);
 
   const handlePrepareTransaction = async () => {
     try {
@@ -147,36 +248,33 @@ export function NumberGuessGame({
       setSuccess(null);
 
       const p1Wager = parseWager(player1Wager);
-      const p2Wager = parseWager(player2Wager);
 
       if (!p1Wager || p1Wager <= 0n) {
-        throw new Error('Enter a valid Player 1 wager');
-      }
-      if (!p2Wager || p2Wager <= 0n) {
-        throw new Error('Enter a valid Player 2 wager');
-      }
-      if (!player2Address) {
-        throw new Error('Enter Player 2 address');
-      }
-      if (player2Address === userAddress) {
-        throw new Error('Cannot play against yourself. Please enter a different Player 2 address.');
+        throw new Error('Enter a valid wager amount');
       }
 
       const signer = getContractSigner();
 
+      // Use placeholder values for Player 2 (they'll rebuild with their own values)
+      // Player 2 address: use a random keypair address (just for simulation)
+      // Player 2 wager: use same as Player 1 wager (just for simulation)
+      const placeholderPlayer2Address = 'GCHPTWXMT3HYF4RLZHWBNRF4MPXLTJ76ISHMSYIWCCDXWUYOQG5MR2AB'; // Placeholder for simulation
+      const placeholderP2Wager = p1Wager; // Same as P1 for simulation
+
       console.log('Preparing transaction for Player 1 to sign...');
-      const xdr = await numberGuessService.prepareStartGame(
+      console.log('Using placeholder Player 2 values for simulation only');
+      const authEntryXDR = await numberGuessService.prepareStartGame(
         sessionId,
         userAddress,
-        player2Address,
+        placeholderPlayer2Address,
         p1Wager,
-        p2Wager,
+        placeholderP2Wager,
         signer
       );
 
-      console.log('Transaction prepared successfully! Player 1 has signed their part.');
-      setExportedXDR(xdr);
-      setSuccess('Transaction prepared! Copy the XDR below and send it to Player 2. Waiting for them to sign...');
+      console.log('Transaction prepared successfully! Player 1 has signed their auth entry.');
+      setExportedAuthEntryXDR(authEntryXDR);
+      setSuccess('Auth entry signed! Copy the auth entry XDR or share URL below and send it to Player 2. Waiting for them to sign...');
 
       // Start polling for the game to be created by Player 2
       const pollInterval = setInterval(async () => {
@@ -189,7 +287,7 @@ export function NumberGuessGame({
 
             // Update game state
             setGameState(game);
-            setExportedXDR(null);
+            setExportedAuthEntryXDR(null);
             setSuccess('Game created! Player 2 has signed and submitted.');
             setGamePhase('guess');
 
@@ -241,67 +339,74 @@ export function NumberGuessGame({
       setError(null);
       setSuccess(null);
 
-      if (!importXDR.trim()) {
-        throw new Error('Enter transaction XDR');
+      // Validate required inputs (only auth entry and player 2 wager)
+      if (!importAuthEntryXDR.trim()) {
+        throw new Error('Enter auth entry XDR from Player 1');
+      }
+      if (!importPlayer2Wager.trim()) {
+        throw new Error('Enter your wager amount (Player 2)');
       }
 
-      // Validate XDR details
-      if (!xdrDetails) {
-        throw new Error('Failed to parse transaction XDR. Invalid format.');
+      // Parse Player 2's wager
+      const p2Wager = parseWager(importPlayer2Wager);
+      if (!p2Wager || p2Wager <= 0n) {
+        throw new Error('Invalid Player 2 wager');
       }
 
-      // Verify the user is Player 2 (the transaction source)
-      if (xdrDetails.transactionSource !== userAddress) {
-        throw new Error(
-          `You are not the transaction source for this game. Expected: ${xdrDetails.transactionSource.slice(0, 8)}...${xdrDetails.transactionSource.slice(-4)}`
-        );
-      }
+      // Parse auth entry to extract game parameters
+      // The auth entry contains: session_id, player1, player1_wager
+      console.log('Parsing auth entry to extract game parameters...');
+      const gameParams = numberGuessService.parseAuthEntry(importAuthEntryXDR.trim());
 
-      // Verify the user is one of the players
-      if (xdrDetails.player1 !== userAddress && xdrDetails.player2 !== userAddress) {
-        throw new Error('You are not one of the players in this game');
-      }
+      console.log('Extracted from auth entry:', {
+        sessionId: gameParams.sessionId,
+        player1: gameParams.player1,
+        player1Wager: gameParams.player1Wager.toString(),
+      });
 
-      // Prevent self-play
-      if (xdrDetails.player1 === xdrDetails.player2) {
-        throw new Error('Invalid game: Player 1 and Player 2 cannot be the same address');
+      // Auto-populate read-only fields from parsed auth entry (for display)
+      setImportSessionId(gameParams.sessionId.toString());
+      setImportPlayer1(gameParams.player1);
+      setImportPlayer1Wager((Number(gameParams.player1Wager) / 10_000_000).toString());
+
+      // Verify the user is Player 2 (prevent self-play)
+      if (gameParams.player1 === userAddress) {
+        throw new Error('Invalid game: You cannot play against yourself (you are Player 1 in this auth entry)');
       }
 
       const signer = getContractSigner();
-      const parsedSessionId = xdrDetails.sessionId;
 
-      // Step 1: Check what signatures are needed
-      const needsSigning = await numberGuessService.checkRequiredSignatures(
-        importXDR.trim(),
-        userAddress
-      );
-
-      console.log('Addresses that need to sign:', needsSigning);
-
-      // Step 2: Player 2 signs their auth entry
-      console.log('Signing auth entry...');
-      const signedXDR = await numberGuessService.importAndSignAuthEntry(
-        importXDR.trim(),
-        userAddress,
+      // Step 1: Import Player 1's signed auth entry and rebuild transaction
+      // New simplified API - only needs: auth entry, player 2 address, player 2 wager
+      console.log('Importing Player 1 auth entry and rebuilding transaction...');
+      const fullySignedTxXDR = await numberGuessService.importAndSignAuthEntry(
+        importAuthEntryXDR.trim(),
+        userAddress, // Player 2 address (current user)
+        p2Wager,
         signer
       );
 
-      // Step 3: Player 2 finalizes and submits (they are the transaction source)
-      // This includes simulation and submission - any error here will be caught and displayed
+      // Step 2: Player 2 finalizes and submits (they are the transaction source)
       console.log('Simulating and submitting transaction...');
       await numberGuessService.finalizeStartGame(
-        signedXDR,
+        fullySignedTxXDR,
         userAddress,
         signer
       );
 
       // If we get here, transaction succeeded! Now update state.
       console.log('Transaction submitted successfully! Updating state...');
-      setSessionId(parsedSessionId);
+      setSessionId(gameParams.sessionId);
       setSuccess('Game created successfully! Both players signed.');
       setGamePhase('guess');
-      setImportXDR('');
-      setXdrDetails(null);
+
+      // Clear import fields
+      setImportAuthEntryXDR('');
+      setImportSessionId('');
+      setImportPlayer1('');
+      setImportPlayer2('');
+      setImportPlayer1Wager('');
+      setImportPlayer2Wager('');
 
       // Load the newly created game state
       await loadGameState();
@@ -390,24 +495,30 @@ export function NumberGuessGame({
     }
   };
 
-  const copyXDRToClipboard = async () => {
-    if (exportedXDR) {
+  const copyAuthEntryToClipboard = async () => {
+    if (exportedAuthEntryXDR) {
       try {
-        await navigator.clipboard.writeText(exportedXDR);
-        setXdrCopied(true);
-        setTimeout(() => setXdrCopied(false), 2000);
+        await navigator.clipboard.writeText(exportedAuthEntryXDR);
+        setAuthEntryCopied(true);
+        setTimeout(() => setAuthEntryCopied(false), 2000);
       } catch (err) {
-        console.error('Failed to copy XDR:', err);
+        console.error('Failed to copy auth entry XDR:', err);
         setError('Failed to copy to clipboard');
       }
     }
   };
 
-  const copyShareGameUrlWithXDR = async () => {
-    if (exportedXDR) {
+  const copyShareGameUrlWithAuthEntry = async () => {
+    if (exportedAuthEntryXDR) {
       try {
-        const encodedXDR = encodeURIComponent(exportedXDR);
-        const shareUrl = `${window.location.origin}${window.location.pathname}?game=number-guess&xdr=${encodedXDR}`;
+        // Build URL with only Player 1's info and auth entry
+        // Player 2 will specify their own wager when they import
+        const params = new URLSearchParams({
+          'game': 'number-guess',
+          'auth': exportedAuthEntryXDR,
+        });
+
+        const shareUrl = `${window.location.origin}${window.location.pathname}?${params.toString()}`;
         await navigator.clipboard.writeText(shareUrl);
         setShareUrlCopied(true);
         setTimeout(() => setShareUrlCopied(false), 2000);
@@ -540,8 +651,13 @@ export function NumberGuessGame({
             <button
               onClick={() => {
                 setCreateMode('create');
-                setExportedXDR(null);
-                setImportXDR('');
+                setExportedAuthEntryXDR(null);
+                setImportAuthEntryXDR('');
+                setImportSessionId('');
+                setImportPlayer1('');
+                setImportPlayer2('');
+                setImportPlayer1Wager('');
+                setImportPlayer2Wager('');
                 setLoadSessionId('');
               }}
               className={`flex-1 py-3 px-4 rounded-lg font-bold text-sm transition-all ${
@@ -555,7 +671,7 @@ export function NumberGuessGame({
             <button
               onClick={() => {
                 setCreateMode('import');
-                setExportedXDR(null);
+                setExportedAuthEntryXDR(null);
                 setLoadSessionId('');
               }}
               className={`flex-1 py-3 px-4 rounded-lg font-bold text-sm transition-all ${
@@ -564,13 +680,18 @@ export function NumberGuessGame({
                   : 'bg-white text-gray-600 hover:bg-gray-50'
               }`}
             >
-              Import Transaction
+              Import Auth Entry
             </button>
             <button
               onClick={() => {
                 setCreateMode('load');
-                setExportedXDR(null);
-                setImportXDR('');
+                setExportedAuthEntryXDR(null);
+                setImportAuthEntryXDR('');
+                setImportSessionId('');
+                setImportPlayer1('');
+                setImportPlayer2('');
+                setImportPlayer1Wager('');
+                setImportPlayer2Wager('');
               }}
               className={`flex-1 py-3 px-4 rounded-lg font-bold text-sm transition-all ${
                 createMode === 'load'
@@ -584,10 +705,10 @@ export function NumberGuessGame({
 
           {createMode === 'create' ? (
             <div className="space-y-6">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="space-y-4">
             <div>
               <label className="block text-sm font-bold text-gray-700 mb-2">
-                Player 1 (You)
+                Your Address (Player 1)
               </label>
               <input
                 type="text"
@@ -596,30 +717,7 @@ export function NumberGuessGame({
                 className="w-full px-4 py-3 rounded-xl bg-gray-100 border-2 border-gray-200 text-sm font-medium text-gray-600"
               />
             </div>
-            <div>
-              <label className="block text-sm font-bold text-gray-700 mb-2">
-                Player 2 Address
-              </label>
-              <input
-                type="text"
-                value={player2Address}
-                onChange={(e) => setPlayer2Address(e.target.value)}
-                placeholder="GABC... (must be different from you)"
-                className={`w-full px-4 py-3 rounded-xl bg-white border-2 focus:outline-none focus:ring-4 text-sm font-medium ${
-                  player2Address && player2Address === userAddress
-                    ? 'border-red-400 focus:border-red-400 focus:ring-red-100'
-                    : 'border-gray-200 focus:border-purple-400 focus:ring-purple-100'
-                }`}
-              />
-              {player2Address && player2Address === userAddress && (
-                <p className="text-xs text-red-600 font-semibold mt-1">
-                  ⚠️ Cannot play against yourself
-                </p>
-              )}
-            </div>
-          </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-bold text-gray-700 mb-2">
                 Your Wager (FP)
@@ -635,17 +733,11 @@ export function NumberGuessGame({
                 Available: {(Number(availableFP) / 10000000).toFixed(2)} FP
               </p>
             </div>
-            <div>
-              <label className="block text-sm font-bold text-gray-700 mb-2">
-                Player 2 Wager (FP)
-              </label>
-              <input
-                type="text"
-                value={player2Wager}
-                onChange={(e) => setPlayer2Wager(e.target.value)}
-                placeholder="0.1"
-                className="w-full px-4 py-3 rounded-xl bg-white border-2 border-gray-200 focus:outline-none focus:border-purple-400 focus:ring-4 focus:ring-purple-100 text-sm font-medium"
-              />
+
+            <div className="p-3 bg-blue-50 border-2 border-blue-200 rounded-xl">
+              <p className="text-xs font-semibold text-blue-800">
+                ℹ️ Player 2 will specify their own address and wager when they import your auth entry. You only need to prepare and export your signature.
+              </p>
             </div>
           </div>
 
@@ -654,34 +746,34 @@ export function NumberGuessGame({
               Session ID: {sessionId}
             </p>
 
-            {!exportedXDR ? (
+            {!exportedAuthEntryXDR ? (
               <button
                 onClick={handlePrepareTransaction}
                 disabled={loading}
                 className="w-full py-4 rounded-xl font-bold text-white text-sm bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 disabled:from-gray-200 disabled:to-gray-300 disabled:text-gray-500 transition-all shadow-lg hover:shadow-xl transform hover:scale-105 disabled:transform-none"
               >
-                {loading ? 'Preparing...' : 'Prepare & Export Transaction'}
+                {loading ? 'Preparing...' : 'Prepare & Export Auth Entry'}
               </button>
             ) : (
               <div className="space-y-3">
                 <div className="p-4 bg-gradient-to-br from-green-50 to-emerald-50 border-2 border-green-200 rounded-xl">
                   <p className="text-xs font-bold uppercase tracking-wide text-green-700 mb-2">
-                    Transaction XDR (Player 1 Signed)
+                    Auth Entry XDR (Player 1 Signed)
                   </p>
                   <div className="bg-white p-3 rounded-lg border border-green-200 mb-3">
                     <code className="text-xs font-mono text-gray-700 break-all">
-                      {exportedXDR}
+                      {exportedAuthEntryXDR}
                     </code>
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <button
-                      onClick={copyXDRToClipboard}
+                      onClick={copyAuthEntryToClipboard}
                       className="py-3 rounded-lg bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 text-white font-bold text-sm transition-all shadow-md hover:shadow-lg transform hover:scale-105"
                     >
-                      {xdrCopied ? '✓ Copied!' : '📋 Copy XDR'}
+                      {authEntryCopied ? '✓ Copied!' : '📋 Copy Auth Entry'}
                     </button>
                     <button
-                      onClick={copyShareGameUrlWithXDR}
+                      onClick={copyShareGameUrlWithAuthEntry}
                       className="py-3 rounded-lg bg-gradient-to-r from-blue-500 to-indigo-500 hover:from-blue-600 hover:to-indigo-600 text-white font-bold text-sm transition-all shadow-md hover:shadow-lg transform hover:scale-105"
                     >
                       {shareUrlCopied ? '✓ Copied!' : '🔗 Share URL'}
@@ -689,7 +781,7 @@ export function NumberGuessGame({
                   </div>
                 </div>
                 <p className="text-xs text-gray-600 text-center font-semibold">
-                  Copy the XDR or share URL with Player 2 to complete the transaction
+                  Copy the auth entry XDR or share URL with Player 2 to complete the transaction
                 </p>
               </div>
             )}
@@ -700,64 +792,114 @@ export function NumberGuessGame({
             <div className="space-y-4">
               <div className="p-4 bg-gradient-to-br from-blue-50 to-cyan-50 border-2 border-blue-200 rounded-xl">
                 <p className="text-sm font-semibold text-blue-800 mb-2">
-                  📥 Import Transaction from Player 1
+                  📥 Import Auth Entry from Player 1
                 </p>
                 <p className="text-xs text-gray-700 mb-4">
-                  Paste the transaction XDR from Player 1. You'll be able to review the details before signing.
+                  Paste the auth entry XDR from Player 1. Session ID, Player 1 address, and their wager will be auto-extracted. You only need to enter your wager amount.
                 </p>
-                <textarea
-                  value={importXDR}
-                  onChange={(e) => setImportXDR(e.target.value)}
-                  placeholder="Paste transaction XDR here..."
-                  rows={6}
-                  className="w-full px-4 py-3 rounded-xl bg-white border-2 border-blue-200 focus:outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100 text-xs font-mono resize-none"
-                />
-              </div>
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-xs font-bold text-gray-700 mb-1">Auth Entry XDR</label>
+                    <textarea
+                      value={importAuthEntryXDR}
+                      onChange={(e) => {
+                        const authEntryXdr = e.target.value;
+                        setImportAuthEntryXDR(authEntryXdr);
 
-              <div className="p-4 bg-gradient-to-br from-yellow-50 to-amber-50 border-2 border-yellow-200 rounded-xl">
-                <p className="text-xs font-bold text-yellow-800 mb-2">
-                  Transaction Details
-                </p>
-                {xdrDetails ? (
-                  <div className="space-y-2 text-xs">
-                    <div className="flex justify-between">
-                      <span className="text-gray-600">Session ID:</span>
-                      <span className="font-bold text-gray-800">{xdrDetails.sessionId}</span>
+                        // Try to parse and auto-fill when auth entry is pasted
+                        if (authEntryXdr.trim().length > 50) {
+                          try {
+                            const parsed = numberGuessService.parseAuthEntry(authEntryXdr.trim());
+                            // Auto-populate the read-only fields
+                            setImportSessionId(parsed.sessionId.toString());
+                            setImportPlayer1(parsed.player1);
+                            setImportPlayer1Wager((Number(parsed.player1Wager) / 10_000_000).toString());
+                            // Prefill Player 2 wager with default 0.1
+                            setImportPlayer2Wager('0.1');
+                            console.log('✅ Auto-filled from auth entry:', parsed);
+                          } catch (err: any) {
+                            // Clear fields if parsing fails
+                            setImportSessionId('');
+                            setImportPlayer1('');
+                            setImportPlayer1Wager('');
+                            console.log('⚠️ Unable to parse auth entry (will retry on import):', err.message);
+                          }
+                        } else {
+                          // Clear fields if auth entry is too short
+                          setImportSessionId('');
+                          setImportPlayer1('');
+                          setImportPlayer1Wager('');
+                        }
+                      }}
+                      placeholder="Paste Player 1's signed auth entry XDR here..."
+                      rows={4}
+                      className="w-full px-4 py-3 rounded-xl bg-white border-2 border-blue-200 focus:outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100 text-xs font-mono resize-none"
+                    />
+                  </div>
+                  {/* Auto-populated fields from auth entry (read-only) */}
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-bold text-gray-500 mb-1">Session ID (auto-filled)</label>
+                      <input
+                        type="text"
+                        value={importSessionId}
+                        readOnly
+                        placeholder="Auto-filled from auth entry"
+                        className="w-full px-4 py-2 rounded-xl bg-gray-50 border-2 border-gray-200 text-xs font-mono text-gray-600 cursor-not-allowed"
+                      />
                     </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-600">Player 1:</span>
-                      <span className="font-mono text-gray-800">{xdrDetails.player1.slice(0, 8)}...{xdrDetails.player1.slice(-4)}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-600">Player 2 (You):</span>
-                      <span className="font-mono text-gray-800">{xdrDetails.player2.slice(0, 8)}...{xdrDetails.player2.slice(-4)}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-600">Player 1 Wager:</span>
-                      <span className="font-bold text-gray-800">{(Number(xdrDetails.player1Wager) / 10000000).toFixed(2)} FP</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-600">Your Wager:</span>
-                      <span className="font-bold text-gray-800">{(Number(xdrDetails.player2Wager) / 10000000).toFixed(2)} FP</span>
-                    </div>
-                    <div className="mt-3 pt-3 border-t border-yellow-200">
-                      <span className="text-gray-600">TX Source:</span>
-                      <span className="font-mono text-xs text-gray-800 ml-1">{xdrDetails.transactionSource.slice(0, 8)}...{xdrDetails.transactionSource.slice(-4)}</span>
+                    <div>
+                      <label className="block text-xs font-bold text-gray-500 mb-1">Player 1 Wager (auto-filled)</label>
+                      <input
+                        type="text"
+                        value={importPlayer1Wager}
+                        readOnly
+                        placeholder="Auto-filled from auth entry"
+                        className="w-full px-4 py-2 rounded-xl bg-gray-50 border-2 border-gray-200 text-xs text-gray-600 cursor-not-allowed"
+                      />
                     </div>
                   </div>
-                ) : (
-                  <p className="text-xs text-gray-600">
-                    Paste XDR above to view transaction details
-                  </p>
-                )}
+                  <div>
+                    <label className="block text-xs font-bold text-gray-500 mb-1">Player 1 Address (auto-filled)</label>
+                    <input
+                      type="text"
+                      value={importPlayer1}
+                      readOnly
+                      placeholder="Auto-filled from auth entry"
+                      className="w-full px-4 py-2 rounded-xl bg-gray-50 border-2 border-gray-200 text-xs font-mono text-gray-600 cursor-not-allowed"
+                    />
+                  </div>
+                  {/* User inputs */}
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-bold text-gray-500 mb-1">Player 2 (You)</label>
+                      <input
+                        type="text"
+                        value={userAddress}
+                        readOnly
+                        className="w-full px-4 py-2 rounded-xl bg-gray-50 border-2 border-gray-200 text-xs font-mono text-gray-600 cursor-not-allowed"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-gray-700 mb-1">Your Wager (FP) *</label>
+                      <input
+                        type="text"
+                        value={importPlayer2Wager}
+                        onChange={(e) => setImportPlayer2Wager(e.target.value)}
+                        placeholder="e.g., 0.1"
+                        className="w-full px-4 py-2 rounded-xl bg-white border-2 border-blue-200 focus:outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100 text-xs"
+                      />
+                    </div>
+                  </div>
+                </div>
               </div>
 
               <button
                 onClick={handleImportTransaction}
-                disabled={loading || !importXDR.trim() || !xdrDetails}
+                disabled={loading || !importAuthEntryXDR.trim() || !importPlayer2Wager.trim()}
                 className="w-full py-4 rounded-xl font-bold text-white text-lg bg-gradient-to-r from-blue-500 via-cyan-500 to-teal-500 hover:from-blue-600 hover:via-cyan-600 hover:to-teal-600 disabled:from-gray-200 disabled:to-gray-300 disabled:text-gray-500 transition-all shadow-xl hover:shadow-2xl transform hover:scale-105 disabled:transform-none"
               >
-                {loading ? 'Importing & Signing...' : 'Import & Sign Transaction'}
+                {loading ? 'Importing & Signing...' : 'Import & Sign Auth Entry'}
               </button>
             </div>
           ) : createMode === 'load' ? (

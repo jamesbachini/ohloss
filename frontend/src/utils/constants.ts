@@ -61,35 +61,27 @@ export const FACTION_COLORS = {
   },
 } as const;
 
-// Epoch duration (seconds) - 60 seconds for testing, 345600 for production (4 days)
-export const EPOCH_DURATION = 60; // From deployment in CHITSHEET.md
-
 // Decimal places for tokens
 export const USDC_DECIMALS = 7;
 export const BLND_DECIMALS = 7;
 
 // Transaction settings
-export const DEFAULT_TX_TIMEOUT = 300; // 5 minutes for single-sig
-export const MULTI_SIG_TX_TIMEOUT = 600; // 10 minutes for multi-sig
-export const DEFAULT_FEE = '100000'; // Base fee in stroops
+export const DEFAULT_FEE = 100000; // Base fee in stroops (0.01 XLM)
 
 // Default options for all contract method calls
 // Matches pattern from bunt/e2e-game.ts
 export const DEFAULT_METHOD_OPTIONS = {
-  fee: 0, // 100000, // Higher fee for mainnet (100,000 stroops = 0.01 XLM)
+  fee: DEFAULT_FEE, // 100,000 stroops = 0.01 XLM
   timeoutInSeconds: 30,
 } as const;
 
 // Authorization entry TTL settings
 // Controls how long authorization signatures remain valid (in minutes)
 export const DEFAULT_AUTH_TTL_MINUTES = 10; // Standard operations (10 minutes)
-export const MULTI_SIG_AUTH_TTL_MINUTES = 60; // Multi-step flows (1 hour)
-export const EXTENDED_AUTH_TTL_MINUTES = 120; // Extended sessions (2 hours)
+export const MULTI_SIG_AUTH_TTL_MINUTES = 1440; // Multi-step flows (24 hours)
 
 // UI constants
-export const MIN_TOUCH_TARGET = 44; // Minimum touch target size in pixels
 export const NOTIFICATION_DURATION = 5000; // 5 seconds
-export const POLL_INTERVAL = 5000; // Poll for updates every 5 seconds
 
 // Game constants
 export const MIN_GUESS = 1;

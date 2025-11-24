@@ -33,24 +33,32 @@ export function GamesCatalog({ userAddress, currentEpoch, availableFP, onGameCom
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const gameParam = params.get('game');
-    const xdrParam = params.get('xdr');
+    const authParam = params.get('auth'); // New simplified format
+    const xdrParam = params.get('xdr'); // Legacy format (backward compatibility)
     const sessionIdParam = params.get('session-id');
 
     if (gameParam && AVAILABLE_GAMES.find(g => g.id === gameParam)) {
-      console.log('Deep link detected:', { game: gameParam, hasXDR: !!xdrParam, sessionId: sessionIdParam });
+      console.log('Deep link detected:', {
+        game: gameParam,
+        hasAuth: !!authParam,
+        hasXDR: !!xdrParam,
+        sessionId: sessionIdParam
+      });
 
       // Auto-select the game
       setSelectedGame(gameParam);
       onGameActiveChange?.(true);
 
       // Set initial values for the game
-      if (xdrParam) {
+      // Check 'auth' first (new format), then 'xdr' (legacy format)
+      const authEntryXDR = authParam || xdrParam;
+      if (authEntryXDR) {
         try {
-          const decodedXDR = decodeURIComponent(xdrParam);
+          const decodedXDR = decodeURIComponent(authEntryXDR);
           setInitialXDR(decodedXDR);
-          console.log('Loaded XDR from URL');
+          console.log('Loaded auth entry from URL (parameter:', authParam ? 'auth' : 'xdr', ')');
         } catch (err) {
-          console.error('Failed to decode XDR from URL:', err);
+          console.error('Failed to decode auth entry from URL:', err);
         }
       }
 
