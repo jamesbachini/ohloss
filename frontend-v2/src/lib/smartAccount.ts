@@ -10,6 +10,8 @@ const CONFIG = {
   accountWasmHash: import.meta.env.VITE_ACCOUNT_WASM_HASH || '',
   webauthnVerifierAddress: import.meta.env.VITE_WEBAUTHN_VERIFIER_ADDRESS || '',
   nativeTokenContract: import.meta.env.VITE_NATIVE_TOKEN_CONTRACT || 'CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC',
+  launchtubeUrl: import.meta.env.VITE_LAUNCHTUBE_URL || '',
+  launchtubeJwt: import.meta.env.VITE_LAUNCHTUBE_JWT || '',
 }
 
 // Singleton kit instance
@@ -33,6 +35,13 @@ export function getKit(): SmartAccountKit {
       webauthnVerifierAddress: CONFIG.webauthnVerifierAddress,
       storage: new IndexedDBStorage(),
       rpName: 'Blendizzard',
+      // Launchtube for fee-sponsored transactions (optional)
+      ...(CONFIG.launchtubeUrl && {
+        launchtube: {
+          url: CONFIG.launchtubeUrl,
+          jwt: CONFIG.launchtubeJwt || undefined,
+        },
+      }),
     })
   }
 
@@ -72,7 +81,8 @@ export async function createWallet(userName?: string): Promise<{
 
 /**
  * Connect to an existing wallet
- * First tries silent restore from stored session, then prompts for passkey if needed
+ * First tries silent restore from stored session, then prompts for passkey if needed.
+ * If the stored session points to a contract that doesn't exist, clears it and prompts fresh.
  */
 export async function connectWallet(options?: {
   prompt?: boolean
@@ -86,28 +96,55 @@ export async function connectWallet(options?: {
 
   // Try silent restore first (unless prompt explicitly requested)
   if (!options?.prompt) {
-    const result = await kit.connectWallet()
-    if (result) {
-      return {
-        contractId: result.contractId,
-        credentialId: result.credentialId,
+    try {
+      const result = await kit.connectWallet()
+      if (result) {
+        return {
+          contractId: result.contractId,
+          credentialId: result.credentialId,
+        }
+      }
+    } catch (err) {
+      // If silent restore failed due to contract not found, clear session
+      // This can happen if the session was from a different network
+      if (err instanceof Error && err.message.includes('not found on-chain')) {
+        console.warn('Stored session invalid, clearing:', err.message)
+        await kit.disconnect()
+      } else {
+        throw err
       }
     }
   }
 
   // If prompt requested or no stored session, prompt for passkey
   if (options?.prompt || options?.credentialId || options?.contractId) {
-    const result = await kit.connectWallet({
-      prompt: options?.prompt,
-      credentialId: options?.credentialId,
-      contractId: options?.contractId,
-    })
+    try {
+      const result = await kit.connectWallet({
+        prompt: options?.prompt,
+        credentialId: options?.credentialId,
+        contractId: options?.contractId,
+      })
 
-    if (result) {
-      return {
-        contractId: result.contractId,
-        credentialId: result.credentialId,
+      if (result) {
+        return {
+          contractId: result.contractId,
+          credentialId: result.credentialId,
+        }
       }
+    } catch (err) {
+      // If the derived contract doesn't exist, clear invalid session and re-throw with helpful message
+      if (err instanceof Error && err.message.includes('not found on-chain')) {
+        console.warn('Contract not found, clearing session:', err.message)
+        await kit.disconnect()
+
+        // Re-throw with a clearer error message
+        throw new Error(
+          `No smart account found for this passkey on this network. ` +
+          `This passkey may have been created on a different network (testnet vs mainnet), ` +
+          `or the contract deployment failed. Please try a different passkey or create a new wallet.`
+        )
+      }
+      throw err
     }
   }
 
@@ -196,6 +233,23 @@ export async function deployPendingCredential(credentialId: string): Promise<{
 export async function deletePendingCredential(credentialId: string): Promise<void> {
   const kit = getKit()
   await kit.credentials.delete(credentialId)
+}
+
+/**
+ * Clear all stored credentials and session
+ * Use this to reset when in a bad state
+ */
+export async function clearAllCredentials(): Promise<void> {
+  const kit = getKit()
+  const allCreds = await kit.credentials.getAll()
+  for (const cred of allCreds) {
+    try {
+      await kit.credentials.delete(cred.credentialId)
+    } catch (e) {
+      console.warn('Failed to delete credential:', cred.credentialId, e)
+    }
+  }
+  await kit.disconnect()
 }
 
 /**

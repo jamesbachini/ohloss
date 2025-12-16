@@ -1,11 +1,14 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { AsciiBackground } from './AsciiBackground'
+import { AsciiLoader } from './AsciiLoader'
 import { useWalletStore } from '@/stores/walletStore'
 import {
   createWallet,
   connectWallet,
   isConfigured,
+  getPendingCredentials,
+  deployPendingCredential,
 } from '@/lib/smartAccount'
 
 const ASCII_LOGO = `
@@ -23,17 +26,51 @@ const FACTIONS = [
   { name: 'SPECIAL_ROCK', symbol: '#', description: 'UNMOVABLE FORCE' },
 ]
 
+// Type for pending credential (matches StoredCredential from smart-account-kit)
+interface PendingCredential {
+  credentialId: string
+  createdAt: number
+}
+
 export function HomePage() {
   const navigate = useNavigate()
-  const { setAddress, setConnecting, setError, isConnecting, error } = useWalletStore()
+  const { setAddress, setError, error } = useWalletStore()
   const [mode, setMode] = useState<'initial' | 'login' | 'register'>('initial')
   const [sdkConfigured, setSdkConfigured] = useState(false)
   const [autoConnectAttempted, setAutoConnectAttempted] = useState(false)
+  const [isLoading, setIsLoading] = useState(false)
+  const [pendingCredentials, setPendingCredentials] = useState<PendingCredential[]>([])
+  const [isReusingKey, setIsReusingKey] = useState(false)
 
   // Check if SDK is configured on mount
   useEffect(() => {
     setSdkConfigured(isConfigured())
   }, [])
+
+  // Check for pending credentials when entering register mode
+  useEffect(() => {
+    if (mode === 'register' && sdkConfigured) {
+      const checkPending = async () => {
+        try {
+          const pending = await getPendingCredentials()
+          if (pending && pending.length > 0) {
+            // Sort by createdAt to get oldest first
+            const sorted = [...pending].sort((a, b) => a.createdAt - b.createdAt)
+            setPendingCredentials(sorted)
+            setIsReusingKey(true)
+          } else {
+            setPendingCredentials([])
+            setIsReusingKey(false)
+          }
+        } catch (err) {
+          console.error('Error checking pending credentials:', err)
+          setPendingCredentials([])
+          setIsReusingKey(false)
+        }
+      }
+      checkPending()
+    }
+  }, [mode, sdkConfigured])
 
   // Try silent auto-connect on mount
   useEffect(() => {
@@ -61,18 +98,51 @@ export function HomePage() {
       return
     }
 
-    setConnecting(true)
+    setIsLoading(true)
     setError(null)
 
+    // Small delay to allow UI to update before WebAuthn dialog appears
+    await new Promise((resolve) => setTimeout(resolve, 50))
+
     try {
-      const result = await createWallet()
-      setAddress(result.contractId)
-      navigate('/account')
+      // Check if we have a pending credential to reuse
+      if (pendingCredentials.length > 0) {
+        // Use the oldest pending credential
+        const oldestCredential = pendingCredentials[0]
+        console.log('Deploying existing passkey:', oldestCredential.credentialId)
+
+        try {
+          const result = await deployPendingCredential(oldestCredential.credentialId)
+          console.log('Deploy result:', result)
+
+          if (result.success) {
+            setAddress(result.contractId)
+            navigate('/account')
+            return
+          } else {
+            // Show the error instead of silently falling back
+            throw new Error(result.error || 'Deployment failed')
+          }
+        } catch (deployErr) {
+          console.error('Deploy error:', deployErr)
+          // Show error to user instead of auto-fallback to new wallet
+          setError(`Failed to deploy existing passkey: ${deployErr instanceof Error ? deployErr.message : 'Unknown error'}. You may need to create a new one.`)
+          // Clear this pending credential and let user try again
+          setPendingCredentials(prev => prev.slice(1))
+          setIsReusingKey(pendingCredentials.length > 1)
+          return
+        }
+      } else {
+        // No pending credentials, create a new wallet
+        const result = await createWallet()
+        setAddress(result.contractId)
+        navigate('/account')
+      }
     } catch (err) {
       console.error('Registration failed:', err)
       setError(err instanceof Error ? err.message : 'Registration failed')
     } finally {
-      setConnecting(false)
+      setIsLoading(false)
     }
   }
 
@@ -82,8 +152,11 @@ export function HomePage() {
       return
     }
 
-    setConnecting(true)
+    setIsLoading(true)
     setError(null)
+
+    // Small delay to allow UI to update before WebAuthn dialog appears
+    await new Promise((resolve) => setTimeout(resolve, 50))
 
     try {
       const result = await connectWallet({ prompt: true })
@@ -97,7 +170,7 @@ export function HomePage() {
       console.error('Login failed:', err)
       setError(err instanceof Error ? err.message : 'Login failed')
     } finally {
-      setConnecting(false)
+      setIsLoading(false)
     }
   }
 
@@ -209,6 +282,24 @@ export function HomePage() {
                   <p className="text-terminal-fg text-sm">CREATE YOUR SMART WALLET</p>
                 </div>
 
+                {/* Pending credential notice (compatible with current network) */}
+                {isReusingKey && (
+                  <div className="border border-yellow-500 p-3 text-left">
+                    <p className="text-yellow-400 text-xs font-bold mb-1">
+                      EXISTING PASSKEY FOUND
+                    </p>
+                    <p className="text-yellow-400/80 text-[10px]">
+                      A PREVIOUS REGISTRATION ATTEMPT WAS INTERRUPTED.
+                      WE'LL COMPLETE IT USING YOUR EXISTING PASSKEY.
+                    </p>
+                    {pendingCredentials.length > 1 && (
+                      <p className="text-yellow-400/60 text-[10px] mt-1">
+                        ({pendingCredentials.length} PENDING KEYS FOUND)
+                      </p>
+                    )}
+                  </div>
+                )}
+
                 <div className="border border-terminal-dim p-4 text-left text-xs space-y-2">
                   <p className="text-terminal-dim">{'>'} NO SEED PHRASE REQUIRED</p>
                   <p className="text-terminal-dim">{'>'} SECURED BY DEVICE BIOMETRICS</p>
@@ -217,11 +308,13 @@ export function HomePage() {
 
                 <button
                   onClick={handleRegister}
-                  disabled={isConnecting}
+                  disabled={isLoading}
                   className="btn-retro text-sm w-full disabled:opacity-50"
                 >
-                  {isConnecting ? (
-                    <span className="animate-pulse">INITIALIZING...</span>
+                  {isLoading ? (
+                    <AsciiLoader text={isReusingKey ? 'DEPLOYING' : 'CREATING'} />
+                  ) : isReusingKey ? (
+                    'COMPLETE REGISTRATION'
                   ) : (
                     'CREATE PASSKEY'
                   )}
@@ -229,7 +322,8 @@ export function HomePage() {
 
                 <button
                   onClick={() => setMode('initial')}
-                  className="text-terminal-dim text-xs hover:text-terminal-fg transition-colors"
+                  disabled={isLoading}
+                  className="text-terminal-dim text-xs hover:text-terminal-fg transition-colors disabled:opacity-50"
                 >
                   {'<'} BACK
                 </button>
@@ -245,19 +339,16 @@ export function HomePage() {
 
                 <button
                   onClick={handleLogin}
-                  disabled={isConnecting}
+                  disabled={isLoading}
                   className="btn-retro text-sm w-full disabled:opacity-50"
                 >
-                  {isConnecting ? (
-                    <span className="animate-pulse">AUTHENTICATING...</span>
-                  ) : (
-                    'LOGIN'
-                  )}
+                  {isLoading ? <AsciiLoader text="CONNECTING" /> : 'LOGIN'}
                 </button>
 
                 <button
                   onClick={() => setMode('initial')}
-                  className="text-terminal-dim text-xs hover:text-terminal-fg transition-colors"
+                  disabled={isLoading}
+                  className="text-terminal-dim text-xs hover:text-terminal-fg transition-colors disabled:opacity-50"
                 >
                   {'<'} BACK
                 </button>
@@ -265,8 +356,8 @@ export function HomePage() {
             )}
 
             {error && (
-              <div className="mt-4 p-3 border border-terminal-fg bg-terminal-bg">
-                <p className="text-terminal-fg text-xs">
+              <div className="mt-4 p-3 border border-red-500 bg-terminal-bg">
+                <p className="text-red-400 text-xs">
                   ERROR: {error}
                 </p>
               </div>

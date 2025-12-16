@@ -1,0 +1,865 @@
+// Contract interaction services
+// Uses the generated bindings + smart-account-kit for signing
+
+import { Client as BlendizzardClient, type EpochInfo, type EpochPlayer, type Player, type Config } from 'blendizzard'
+import { Client as FeeVaultClient } from 'fee-vault'
+import { rpc, Address, xdr, scValToNative } from '@stellar/stellar-sdk'
+import { getKit } from './smartAccount'
+
+const { Server: RpcServer } = rpc
+
+// Configuration from environment
+const CONFIG = {
+  rpcUrl: import.meta.env.VITE_RPC_URL || 'https://soroban-testnet.stellar.org',
+  networkPassphrase: import.meta.env.VITE_NETWORK_PASSPHRASE || 'Test SDF Network ; September 2015',
+  blendizzardContract: import.meta.env.VITE_BLENDIZZARD_CONTRACT || '',
+  feeVaultContract: import.meta.env.VITE_FEE_VAULT_CONTRACT || '',
+  usdcTokenContract: import.meta.env.VITE_USDC_TOKEN_CONTRACT || '',
+  nativeTokenContract: import.meta.env.VITE_NATIVE_TOKEN_CONTRACT || '',
+}
+
+// Default options for contract calls
+const DEFAULT_OPTIONS = {
+  timeoutInSeconds: 30,
+  fee: '100',
+}
+
+// =============================================================================
+// Contract Clients
+// =============================================================================
+
+let blendizzardClient: BlendizzardClient | null = null
+let feeVaultClient: FeeVaultClient | null = null
+let rpcInstance: InstanceType<typeof RpcServer> | null = null
+
+export function getRpc(): InstanceType<typeof RpcServer> {
+  if (!rpcInstance) {
+    rpcInstance = new RpcServer(CONFIG.rpcUrl)
+  }
+  return rpcInstance
+}
+
+function getBlendizzardClient(): BlendizzardClient {
+  if (!blendizzardClient) {
+    blendizzardClient = new BlendizzardClient({
+      contractId: CONFIG.blendizzardContract,
+      networkPassphrase: CONFIG.networkPassphrase,
+      rpcUrl: CONFIG.rpcUrl,
+    })
+  }
+  return blendizzardClient
+}
+
+function getFeeVaultClient(): FeeVaultClient {
+  if (!feeVaultClient) {
+    feeVaultClient = new FeeVaultClient({
+      contractId: CONFIG.feeVaultContract,
+      networkPassphrase: CONFIG.networkPassphrase,
+      rpcUrl: CONFIG.rpcUrl,
+    })
+  }
+  return feeVaultClient
+}
+
+/**
+ * Create a client for building transactions
+ * Note: We don't pass publicKey because smart accounts use C-addresses (contract IDs)
+ * which are not valid for the SDK's publicKey field (expects G-addresses).
+ * The kit.signAndSubmit() will handle setting the correct source account.
+ */
+function createSigningBlendizzardClient(): BlendizzardClient {
+  return new BlendizzardClient({
+    contractId: CONFIG.blendizzardContract,
+    networkPassphrase: CONFIG.networkPassphrase,
+    rpcUrl: CONFIG.rpcUrl,
+  })
+}
+
+function createSigningFeeVaultClient(): FeeVaultClient {
+  return new FeeVaultClient({
+    contractId: CONFIG.feeVaultContract,
+    networkPassphrase: CONFIG.networkPassphrase,
+    rpcUrl: CONFIG.rpcUrl,
+  })
+}
+
+// =============================================================================
+// Blendizzard Read Operations
+// =============================================================================
+
+export async function getCurrentEpoch(): Promise<number> {
+  const client = getBlendizzardClient()
+  const tx = await client.get_current_epoch()
+  const result = await tx.simulate()
+  return Number(result.result)
+}
+
+export async function getEpochInfo(epoch: number): Promise<EpochInfo | null> {
+  try {
+    const client = getBlendizzardClient()
+    const tx = await client.get_epoch({ epoch })
+    const result = await tx.simulate()
+    return result.result.unwrap()
+  } catch (error) {
+    console.error(`Error fetching epoch ${epoch}:`, error)
+    return null
+  }
+}
+
+export async function getPlayerData(playerAddress: string): Promise<Player | null> {
+  try {
+    const client = getBlendizzardClient()
+    const tx = await client.get_player({ player: playerAddress })
+    const result = await tx.simulate()
+    return result.result.unwrap()
+  } catch (error) {
+    console.error(`Error fetching player ${playerAddress}:`, error)
+    return null
+  }
+}
+
+export async function getEpochPlayerData(
+  epoch: number,
+  playerAddress: string
+): Promise<EpochPlayer | null> {
+  try {
+    const client = getBlendizzardClient()
+    const tx = await client.get_epoch_player({ epoch, player: playerAddress })
+    const result = await tx.simulate()
+    return result.result.unwrap()
+  } catch (error) {
+    console.error(`Error fetching epoch player for epoch ${epoch}:`, error)
+    return null
+  }
+}
+
+export async function getConfig(): Promise<Config | null> {
+  try {
+    const client = getBlendizzardClient()
+    const tx = await client.get_config()
+    const result = await tx.simulate()
+    return result.result
+  } catch (error) {
+    console.error('Error fetching config:', error)
+    return null
+  }
+}
+
+export async function isPaused(): Promise<boolean> {
+  try {
+    const client = getBlendizzardClient()
+    const tx = await client.is_paused()
+    const result = await tx.simulate()
+    return result.result
+  } catch (error) {
+    console.error('Error checking pause state:', error)
+    return false
+  }
+}
+
+// =============================================================================
+// Blendizzard Write Operations
+// =============================================================================
+
+/**
+ * Select a faction for the player
+ * Uses smart-account-kit for signing
+ */
+export async function selectFaction(
+  playerAddress: string,
+  faction: number
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const kit = getKit()
+
+    if (!kit.isConnected) {
+      return { success: false, error: 'Wallet not connected' }
+    }
+
+    const client = createSigningBlendizzardClient()
+    const tx = await client.select_faction({ player: playerAddress, faction }, DEFAULT_OPTIONS)
+
+    // Use the kit's signAndSubmit which handles the full flow
+    const result = await kit.signAndSubmit(tx)
+
+    return {
+      success: result.success,
+      error: result.error,
+    }
+  } catch (error) {
+    console.error('Error selecting faction:', error)
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to select faction',
+    }
+  }
+}
+
+/**
+ * Cycle to the next epoch
+ * Anyone can call this if the epoch has ended
+ */
+export async function cycleEpoch(): Promise<{ success: boolean; newEpoch?: number; error?: string }> {
+  try {
+    const kit = getKit()
+
+    if (!kit.isConnected) {
+      return { success: false, error: 'Wallet not connected' }
+    }
+
+    const client = createSigningBlendizzardClient()
+    const tx = await client.cycle_epoch(DEFAULT_OPTIONS)
+
+    const result = await kit.signAndSubmit(tx)
+
+    if (result.success) {
+      // Fetch the new epoch number
+      const newEpoch = await getCurrentEpoch()
+      return { success: true, newEpoch }
+    }
+
+    return { success: false, error: result.error }
+  } catch (error) {
+    console.error('Error cycling epoch:', error)
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to cycle epoch',
+    }
+  }
+}
+
+/**
+ * Claim epoch reward for a player
+ */
+export async function claimEpochReward(
+  playerAddress: string,
+  epoch: number
+): Promise<{ success: boolean; amount?: bigint; error?: string }> {
+  try {
+    const kit = getKit()
+
+    if (!kit.isConnected) {
+      return { success: false, error: 'Wallet not connected' }
+    }
+
+    const client = createSigningBlendizzardClient()
+    const tx = await client.claim_epoch_reward({ player: playerAddress, epoch }, DEFAULT_OPTIONS)
+
+    const result = await kit.signAndSubmit(tx)
+
+    return {
+      success: result.success,
+      error: result.error,
+    }
+  } catch (error) {
+    console.error('Error claiming epoch reward:', error)
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to claim reward',
+    }
+  }
+}
+
+/**
+ * Claim developer reward for a game
+ */
+export async function claimDevReward(
+  gameId: string,
+  epoch: number
+): Promise<{ success: boolean; amount?: bigint; error?: string }> {
+  try {
+    const kit = getKit()
+
+    if (!kit.isConnected) {
+      return { success: false, error: 'Wallet not connected' }
+    }
+
+    const client = createSigningBlendizzardClient()
+    const tx = await client.claim_dev_reward({ game_id: gameId, epoch }, DEFAULT_OPTIONS)
+
+    const result = await kit.signAndSubmit(tx)
+
+    return {
+      success: result.success,
+      error: result.error,
+    }
+  } catch (error) {
+    console.error('Error claiming dev reward:', error)
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to claim dev reward',
+    }
+  }
+}
+
+/**
+ * Check if a reward can be claimed (via simulation)
+ */
+export async function canClaimEpochReward(
+  playerAddress: string,
+  epoch: number
+): Promise<{ canClaim: boolean; estimatedAmount?: bigint }> {
+  try {
+    const client = new BlendizzardClient({
+      contractId: CONFIG.blendizzardContract,
+      networkPassphrase: CONFIG.networkPassphrase,
+      rpcUrl: CONFIG.rpcUrl,
+      publicKey: playerAddress,
+    })
+
+    const tx = await client.claim_epoch_reward({ player: playerAddress, epoch })
+    const simResult = await tx.simulate()
+
+    // Check if result is Ok (not Err)
+    const result = simResult.result
+    if (result && typeof result === 'object' && 'error' in result) {
+      return { canClaim: false }
+    }
+
+    if (result !== undefined && result !== null) {
+      // Try to extract the amount
+      let amount: bigint | undefined
+      if (typeof result === 'bigint') {
+        amount = result
+      } else if (typeof result === 'number') {
+        amount = BigInt(result)
+      }
+      return { canClaim: true, estimatedAmount: amount }
+    }
+
+    return { canClaim: false }
+  } catch (error) {
+    console.error(`Error checking claim for epoch ${epoch}:`, error)
+    return { canClaim: false }
+  }
+}
+
+// =============================================================================
+// Fee Vault Operations
+// =============================================================================
+
+export async function getVaultBalance(userAddress: string): Promise<bigint> {
+  try {
+    const client = getFeeVaultClient()
+    const tx = await client.get_underlying_tokens({ user: userAddress })
+    const result = await tx.simulate()
+    return BigInt(result.result)
+  } catch (error) {
+    console.error('Error fetching vault balance:', error)
+    return 0n
+  }
+}
+
+export async function getVaultShares(userAddress: string): Promise<bigint> {
+  try {
+    const client = getFeeVaultClient()
+    const tx = await client.get_shares({ user: userAddress })
+    const result = await tx.simulate()
+    return BigInt(result.result)
+  } catch (error) {
+    console.error('Error fetching vault shares:', error)
+    return 0n
+  }
+}
+
+export async function getVaultSummary() {
+  try {
+    const client = getFeeVaultClient()
+    const tx = await client.get_vault_summary()
+    const result = await tx.simulate()
+    return result.result
+  } catch (error) {
+    console.error('Error fetching vault summary:', error)
+    return null
+  }
+}
+
+/**
+ * Deposit into the vault
+ */
+export async function depositToVault(
+  userAddress: string,
+  amount: bigint
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const kit = getKit()
+
+    if (!kit.isConnected) {
+      return { success: false, error: 'Wallet not connected' }
+    }
+
+    const client = createSigningFeeVaultClient()
+    const tx = await client.deposit({ user: userAddress, amount }, DEFAULT_OPTIONS)
+
+    const result = await kit.signAndSubmit(tx)
+
+    return {
+      success: result.success,
+      error: result.error,
+    }
+  } catch (error) {
+    console.error('Error depositing to vault:', error)
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to deposit',
+    }
+  }
+}
+
+/**
+ * Withdraw from the vault
+ */
+export async function withdrawFromVault(
+  userAddress: string,
+  amount: bigint
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const kit = getKit()
+
+    if (!kit.isConnected) {
+      return { success: false, error: 'Wallet not connected' }
+    }
+
+    const client = createSigningFeeVaultClient()
+    const tx = await client.withdraw({ user: userAddress, amount }, DEFAULT_OPTIONS)
+
+    const result = await kit.signAndSubmit(tx)
+
+    return {
+      success: result.success,
+      error: result.error,
+    }
+  } catch (error) {
+    console.error('Error withdrawing from vault:', error)
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to withdraw',
+    }
+  }
+}
+
+// =============================================================================
+// Token Balance Operations
+// =============================================================================
+
+/**
+ * Get token balance for an address
+ */
+export async function getTokenBalance(
+  tokenContract: string,
+  address: string
+): Promise<bigint> {
+  const rpcClient = getRpc()
+
+  try {
+    const balanceKey = xdr.ScVal.scvVec([
+      xdr.ScVal.scvSymbol('Balance'),
+      new Address(address).toScVal(),
+    ])
+
+    const ledgerKey = xdr.LedgerKey.contractData(
+      new xdr.LedgerKeyContractData({
+        contract: new Address(tokenContract).toScAddress(),
+        key: balanceKey,
+        durability: xdr.ContractDataDurability.persistent(),
+      })
+    )
+
+    const response = await rpcClient.getLedgerEntries(ledgerKey)
+
+    if (response.entries && response.entries.length > 0) {
+      const entry = response.entries[0]
+      const contractData = entry.val.contractData()
+      const val = contractData.val()
+
+      // Balance is stored as i128
+      if (val.switch().name === 'scvI128') {
+        const i128 = val.i128()
+        const lo = BigInt(i128.lo().toString())
+        const hi = BigInt(i128.hi().toString())
+        return (hi << 64n) | lo
+      }
+    }
+
+    return 0n
+  } catch (error) {
+    console.error('Error fetching token balance:', error)
+    return 0n
+  }
+}
+
+export async function getXLMBalance(address: string): Promise<bigint> {
+  return getTokenBalance(CONFIG.nativeTokenContract, address)
+}
+
+export async function getUSDCBalance(address: string): Promise<bigint> {
+  return getTokenBalance(CONFIG.usdcTokenContract, address)
+}
+
+// =============================================================================
+// Batch Data Fetching (for rewards)
+// =============================================================================
+
+const MAX_LEDGER_ENTRIES_PER_REQUEST = 200
+
+/**
+ * Build storage key for EpochPlayer
+ */
+function buildEpochPlayerKey(epoch: number, address: string): xdr.ScVal {
+  return xdr.ScVal.scvVec([
+    xdr.ScVal.scvSymbol('EpochPlayer'),
+    xdr.ScVal.scvU32(epoch),
+    new Address(address).toScVal(),
+  ])
+}
+
+/**
+ * Build storage key for Epoch
+ */
+function buildEpochKey(epoch: number): xdr.ScVal {
+  return xdr.ScVal.scvVec([
+    xdr.ScVal.scvSymbol('Epoch'),
+    xdr.ScVal.scvU32(epoch),
+  ])
+}
+
+/**
+ * Build storage key for EpochGame
+ */
+function buildEpochGameKey(epoch: number, gameAddress: string): xdr.ScVal {
+  return xdr.ScVal.scvVec([
+    xdr.ScVal.scvSymbol('EpochGame'),
+    xdr.ScVal.scvU32(epoch),
+    new Address(gameAddress).toScVal(),
+  ])
+}
+
+/**
+ * Convert storage key to ledger key
+ */
+function storageKeyToLedgerKey(
+  contractId: string,
+  key: xdr.ScVal,
+  durability: 'temporary' | 'persistent' = 'temporary'
+): xdr.LedgerKey {
+  return xdr.LedgerKey.contractData(
+    new xdr.LedgerKeyContractData({
+      contract: new Address(contractId).toScAddress(),
+      key,
+      durability:
+        durability === 'persistent'
+          ? xdr.ContractDataDurability.persistent()
+          : xdr.ContractDataDurability.temporary(),
+    })
+  )
+}
+
+/**
+ * Batch fetch ledger entries
+ */
+async function batchGetLedgerEntries(
+  keys: xdr.LedgerKey[]
+): Promise<(xdr.LedgerEntryData | null)[]> {
+  const rpcClient = getRpc()
+  const results: (xdr.LedgerEntryData | null)[] = new Array(keys.length).fill(null)
+
+  // Split into batches of 200
+  for (let i = 0; i < keys.length; i += MAX_LEDGER_ENTRIES_PER_REQUEST) {
+    const batch = keys.slice(i, i + MAX_LEDGER_ENTRIES_PER_REQUEST)
+
+    try {
+      const response = await rpcClient.getLedgerEntries(...batch)
+
+      if (response.entries) {
+        for (let j = 0; j < batch.length; j++) {
+          const entry = response.entries[j]
+          if (entry) {
+            results[i + j] = entry.val
+          }
+        }
+      }
+    } catch (error) {
+      console.error(`Error fetching ledger entries batch ${i}:`, error)
+    }
+  }
+
+  return results
+}
+
+/**
+ * Parse EpochInfo from ledger entry
+ */
+function parseEpochInfo(data: xdr.LedgerEntryData | null): EpochInfo | null {
+  if (!data) return null
+
+  try {
+    const contractData = data.contractData()
+    const val = contractData.val()
+    const native = scValToNative(val)
+
+    return {
+      start_time: BigInt(native.start_time),
+      end_time: BigInt(native.end_time),
+      faction_standings: new Map(
+        Object.entries(native.faction_standings || {}).map(([k, v]) => [
+          Number(k),
+          BigInt(String(v)),
+        ])
+      ),
+      reward_pool: BigInt(native.reward_pool),
+      dev_reward_pool: BigInt(native.dev_reward_pool || 0),
+      total_game_fp: BigInt(native.total_game_fp || 0),
+      winning_faction: native.winning_faction,
+      is_finalized: native.is_finalized,
+    } as EpochInfo
+  } catch (error) {
+    console.error('Error parsing EpochInfo:', error)
+    return null
+  }
+}
+
+/**
+ * Parse EpochPlayer from ledger entry
+ */
+function parseEpochPlayer(data: xdr.LedgerEntryData | null): EpochPlayer | null {
+  if (!data) return null
+
+  try {
+    const contractData = data.contractData()
+    const val = contractData.val()
+    const native = scValToNative(val)
+
+    return {
+      epoch_faction: native.epoch_faction ?? null,
+      epoch_balance_snapshot: BigInt(native.epoch_balance_snapshot),
+      available_fp: BigInt(native.available_fp),
+      total_fp_contributed: BigInt(native.total_fp_contributed),
+    } as EpochPlayer
+  } catch (error) {
+    console.error('Error parsing EpochPlayer:', error)
+    return null
+  }
+}
+
+/**
+ * Fetch claimable player rewards for the last 100 epochs
+ */
+export interface ClaimableReward {
+  epoch: number
+  amount: bigint
+  faction: number
+  fpContributed: bigint
+}
+
+export async function fetchPlayerRewards(
+  playerAddress: string,
+  currentEpoch: number,
+  epochsToFetch = 100
+): Promise<ClaimableReward[]> {
+  const contractId = CONFIG.blendizzardContract
+  const startEpoch = Math.max(0, currentEpoch - epochsToFetch)
+  const numEpochs = currentEpoch - startEpoch
+
+  if (numEpochs <= 0) return []
+
+  // Build keys for EpochPlayer and Epoch info for each epoch
+  const keys: xdr.LedgerKey[] = []
+
+  for (let epoch = startEpoch; epoch < currentEpoch; epoch++) {
+    // EpochPlayer key
+    keys.push(
+      storageKeyToLedgerKey(contractId, buildEpochPlayerKey(epoch, playerAddress), 'temporary')
+    )
+    // Epoch info key
+    keys.push(storageKeyToLedgerKey(contractId, buildEpochKey(epoch), 'temporary'))
+  }
+
+  // Batch fetch
+  const results = await batchGetLedgerEntries(keys)
+
+  // Process results
+  const rewards: ClaimableReward[] = []
+
+  for (let i = 0; i < numEpochs; i++) {
+    const epoch = startEpoch + i
+    const epochPlayerData = results[i * 2]
+    const epochInfoData = results[i * 2 + 1]
+
+    const epochPlayer = parseEpochPlayer(epochPlayerData)
+    const epochInfo = parseEpochInfo(epochInfoData)
+
+    if (!epochPlayer || !epochInfo) continue
+
+    // Check if epoch is finalized and player was in winning faction
+    const playerFaction = epochPlayer.epoch_faction
+    const winningFaction = epochInfo.winning_faction
+
+    if (
+      epochInfo.is_finalized &&
+      winningFaction !== undefined &&
+      winningFaction !== null &&
+      playerFaction !== undefined &&
+      playerFaction !== null &&
+      playerFaction === winningFaction &&
+      epochPlayer.total_fp_contributed > 0n
+    ) {
+      // Calculate estimated reward
+      const winningFactionFp =
+        epochInfo.faction_standings.get(winningFaction) || 1n
+      const estimatedReward =
+        (epochPlayer.total_fp_contributed * epochInfo.reward_pool) / winningFactionFp
+
+      if (estimatedReward > 0n) {
+        rewards.push({
+          epoch,
+          amount: estimatedReward,
+          faction: playerFaction,
+          fpContributed: epochPlayer.total_fp_contributed,
+        })
+      }
+    }
+  }
+
+  return rewards
+}
+
+/**
+ * Fetch claimable developer rewards for the last 100 epochs
+ */
+export interface DevClaimableReward {
+  epoch: number
+  gameAddress: string
+  amount: bigint
+  fpContributed: bigint
+}
+
+/**
+ * Fetch claimable developer rewards for the last 100 epochs
+ */
+export async function fetchDevRewards(
+  gameAddresses: string[],
+  currentEpoch: number,
+  epochsToFetch = 100
+): Promise<DevClaimableReward[]> {
+  if (gameAddresses.length === 0) return []
+
+  const contractId = CONFIG.blendizzardContract
+  const startEpoch = Math.max(0, currentEpoch - epochsToFetch)
+  const numEpochs = currentEpoch - startEpoch
+
+  if (numEpochs <= 0) return []
+
+  // First, fetch all epoch info
+  const epochInfoKeys: xdr.LedgerKey[] = []
+  for (let epoch = startEpoch; epoch < currentEpoch; epoch++) {
+    epochInfoKeys.push(storageKeyToLedgerKey(contractId, buildEpochKey(epoch), 'temporary'))
+  }
+
+  const epochInfoResults = await batchGetLedgerEntries(epochInfoKeys)
+  const epochInfoMap = new Map<number, EpochInfo>()
+
+  for (let i = 0; i < numEpochs; i++) {
+    const epoch = startEpoch + i
+    const info = parseEpochInfo(epochInfoResults[i])
+    if (info) epochInfoMap.set(epoch, info)
+  }
+
+  // Now fetch EpochGame data for each game/epoch combo
+  const gameKeys: xdr.LedgerKey[] = []
+  const keyMeta: { epoch: number; gameAddress: string }[] = []
+
+  for (let epoch = startEpoch; epoch < currentEpoch; epoch++) {
+    for (const gameAddress of gameAddresses) {
+      gameKeys.push(
+        storageKeyToLedgerKey(contractId, buildEpochGameKey(epoch, gameAddress), 'temporary')
+      )
+      keyMeta.push({ epoch, gameAddress })
+    }
+  }
+
+  const gameResults = await batchGetLedgerEntries(gameKeys)
+
+  // Process results
+  const rewards: DevClaimableReward[] = []
+
+  for (let i = 0; i < gameResults.length; i++) {
+    const data = gameResults[i]
+    const meta = keyMeta[i]
+
+    if (!data || !meta) continue
+
+    try {
+      const contractData = data.contractData()
+      const val = contractData.val()
+      const native = scValToNative(val)
+
+      const epochGame = {
+        total_fp_contributed: BigInt(native.total_fp_contributed || 0),
+      }
+
+      const epochInfo = epochInfoMap.get(meta.epoch)
+
+      if (!epochInfo) continue
+
+      // Check if epoch is finalized and game has contributions
+      if (
+        epochInfo.is_finalized &&
+        epochGame.total_fp_contributed > 0n &&
+        epochInfo.total_game_fp > 0n
+      ) {
+        // Calculate estimated dev reward: (game_fp / total_game_fp) * dev_reward_pool
+        const estimatedReward =
+          (epochGame.total_fp_contributed * epochInfo.dev_reward_pool) / epochInfo.total_game_fp
+
+        if (estimatedReward > 0n) {
+          rewards.push({
+            epoch: meta.epoch,
+            gameAddress: meta.gameAddress,
+            amount: estimatedReward,
+            fpContributed: epochGame.total_fp_contributed,
+          })
+        }
+      }
+    } catch (error) {
+      console.error(`Error parsing EpochGame for epoch ${meta.epoch}:`, error)
+    }
+  }
+
+  return rewards
+}
+
+// =============================================================================
+// Formatting Utilities
+// =============================================================================
+
+export const SCALAR_7 = 10_000_000n
+
+/**
+ * Format a 7-decimal fixed point number to display string
+ */
+export function formatUSDC(amount: bigint, decimals = 2): string {
+  const whole = amount / SCALAR_7
+  const fraction = amount % SCALAR_7
+  const fractionStr = fraction.toString().padStart(7, '0').slice(0, decimals)
+  return `${whole.toLocaleString()}.${fractionStr}`
+}
+
+/**
+ * Parse a display string to 7-decimal fixed point
+ */
+export function parseUSDCInput(amount: string): bigint {
+  const [whole, fraction = ''] = amount.split('.')
+  const wholeNum = BigInt(whole || '0')
+  const fractionPadded = fraction.padEnd(7, '0').slice(0, 7)
+  return wholeNum * SCALAR_7 + BigInt(fractionPadded)
+}
+
+/**
+ * Format XLM (7 decimals like USDC on Stellar)
+ */
+export function formatXLM(amount: bigint, decimals = 2): string {
+  return formatUSDC(amount, decimals)
+}
+
+// Export config for use elsewhere
+export { CONFIG }
