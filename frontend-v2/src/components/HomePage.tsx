@@ -7,9 +7,16 @@ import {
   createWallet,
   connectWallet,
   isConfigured,
-  getPendingCredentials,
-  deployPendingCredential,
 } from '@/lib/smartAccount'
+import {
+  type PendingCredential,
+  loadPendingCredentialsSorted,
+  deployPendingCredentialOrThrow,
+  deletePendingCredentialSafe,
+  formatAge,
+  formatCreatedAt,
+  formatCredentialIdShort,
+} from '@/lib/pendingPasskeys'
 
 const ASCII_LOGO = `
   ██████╗ ██╗  ██╗██╗      ██████╗ ███████╗███████╗
@@ -26,11 +33,6 @@ const FACTIONS = [
   { name: 'SPECIAL_ROCK', symbol: '#', description: 'UNMOVABLE FORCE' },
 ]
 
-// Type for pending credential (matches StoredCredential from smart-account-kit)
-interface PendingCredential {
-  credentialId: string
-  createdAt: number
-}
 
 export function HomePage() {
   const navigate = useNavigate()
@@ -40,7 +42,8 @@ export function HomePage() {
   const [autoConnectAttempted, setAutoConnectAttempted] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [pendingCredentials, setPendingCredentials] = useState<PendingCredential[]>([])
-  const [isReusingKey, setIsReusingKey] = useState(false)
+  const [registerChoice, setRegisterChoice] = useState<'pending' | 'new'>('new')
+  const [selectedPendingCredentialId, setSelectedPendingCredentialId] = useState<string | null>(null)
 
   // Check if SDK is configured on mount
   useEffect(() => {
@@ -52,20 +55,22 @@ export function HomePage() {
     if (mode === 'register' && sdkConfigured) {
       const checkPending = async () => {
         try {
-          const pending = await getPendingCredentials()
-          if (pending && pending.length > 0) {
-            // Sort by createdAt to get oldest first
-            const sorted = [...pending].sort((a, b) => a.createdAt - b.createdAt)
+          const sorted = await loadPendingCredentialsSorted()
+          if (sorted.length > 0) {
             setPendingCredentials(sorted)
-            setIsReusingKey(true)
+            // Default to reusing the oldest pending passkey, but allow opting out.
+            setRegisterChoice('pending')
+            setSelectedPendingCredentialId((prev) => prev || sorted[0].credentialId)
           } else {
             setPendingCredentials([])
-            setIsReusingKey(false)
+            setRegisterChoice('new')
+            setSelectedPendingCredentialId(null)
           }
         } catch (err) {
           console.error('Error checking pending credentials:', err)
           setPendingCredentials([])
-          setIsReusingKey(false)
+          setRegisterChoice('new')
+          setSelectedPendingCredentialId(null)
         }
       }
       checkPending()
@@ -92,6 +97,43 @@ export function HomePage() {
     tryAutoConnect()
   }, [sdkConfigured, autoConnectAttempted, setAddress, navigate])
 
+  const refreshPending = async () => {
+    try {
+      const sorted = await loadPendingCredentialsSorted()
+      setPendingCredentials(sorted)
+      if (sorted.length === 0) {
+        setRegisterChoice('new')
+        setSelectedPendingCredentialId(null)
+      } else {
+        setSelectedPendingCredentialId((prev) => prev || sorted[0].credentialId)
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  const handleDeleteSelectedPending = async () => {
+    if (!selectedPendingCredentialId) return
+
+    const ok = window.confirm(
+      'Remove this pending passkey from this device?\n\nThis should only be used if you no longer have access to that passkey or you do not intend to deploy it.'
+    )
+    if (!ok) return
+
+    setIsLoading(true)
+    setError(null)
+
+    try {
+      await deletePendingCredentialSafe(selectedPendingCredentialId)
+      await refreshPending()
+    } catch (err) {
+      console.error('Failed to delete pending passkey:', err)
+      setError(err instanceof Error ? err.message : 'Failed to delete pending passkey')
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
   const handleRegister = async () => {
     if (!sdkConfigured) {
       setError('Smart Account Kit not configured. Check environment variables.')
@@ -105,39 +147,29 @@ export function HomePage() {
     await new Promise((resolve) => setTimeout(resolve, 50))
 
     try {
-      // Check if we have a pending credential to reuse
-      if (pendingCredentials.length > 0) {
-        // Use the oldest pending credential
-        const oldestCredential = pendingCredentials[0]
-        console.log('Deploying existing passkey:', oldestCredential.credentialId)
-
+      if (registerChoice === 'pending' && selectedPendingCredentialId) {
         try {
-          const result = await deployPendingCredential(oldestCredential.credentialId)
-          console.log('Deploy result:', result)
-
-          if (result.success) {
-            setAddress(result.contractId)
-            navigate('/account')
-            return
-          } else {
-            // Show the error instead of silently falling back
-            throw new Error(result.error || 'Deployment failed')
-          }
+          const contractId = await deployPendingCredentialOrThrow(selectedPendingCredentialId)
+          setAddress(contractId)
+          navigate('/account')
+          return
         } catch (deployErr) {
           console.error('Deploy error:', deployErr)
-          // Show error to user instead of auto-fallback to new wallet
-          setError(`Failed to deploy existing passkey: ${deployErr instanceof Error ? deployErr.message : 'Unknown error'}. You may need to create a new one.`)
-          // Clear this pending credential and let user try again
-          setPendingCredentials(prev => prev.slice(1))
-          setIsReusingKey(pendingCredentials.length > 1)
+
+          // IMPORTANT: do not delete/hide pending passkeys on failure.
+          setError(
+            `Failed to deploy existing passkey: ${deployErr instanceof Error ? deployErr.message : 'Unknown error'}. ` +
+              `You can retry, pick a different pending passkey, or create a new one.`
+          )
+          await refreshPending()
           return
         }
-      } else {
-        // No pending credentials, create a new wallet
-        const result = await createWallet()
-        setAddress(result.contractId)
-        navigate('/account')
       }
+
+      // Create a new wallet (new passkey)
+      const result = await createWallet()
+      setAddress(result.contractId)
+      navigate('/account')
     } catch (err) {
       console.error('Registration failed:', err)
       setError(err instanceof Error ? err.message : 'Registration failed')
@@ -282,21 +314,70 @@ export function HomePage() {
                   <p className="text-terminal-fg text-sm">CREATE YOUR SMART WALLET</p>
                 </div>
 
-                {/* Pending credential notice (compatible with current network) */}
-                {isReusingKey && (
-                  <div className="border border-yellow-500 p-3 text-left">
-                    <p className="text-yellow-400 text-xs font-bold mb-1">
-                      EXISTING PASSKEY FOUND
-                    </p>
-                    <p className="text-yellow-400/80 text-[10px]">
-                      A PREVIOUS REGISTRATION ATTEMPT WAS INTERRUPTED.
-                      WE'LL COMPLETE IT USING YOUR EXISTING PASSKEY.
-                    </p>
-                    {pendingCredentials.length > 1 && (
-                      <p className="text-yellow-400/60 text-[10px] mt-1">
-                        ({pendingCredentials.length} PENDING KEYS FOUND)
+                {pendingCredentials.length > 0 && (
+                  <div className="border border-yellow-500 p-3 text-left space-y-3">
+                    <div>
+                      <p className="text-yellow-400 text-xs font-bold mb-1">
+                        PENDING PASSKEYS FOUND
                       </p>
-                    )}
+                      <p className="text-yellow-400/80 text-[10px]">
+                        A PREVIOUS REGISTRATION MAY HAVE BEEN INTERRUPTED. YOU CAN DEPLOY AN EXISTING
+                        PENDING PASSKEY OR CREATE A NEW ONE. PENDING PASSKEYS ARE NOT LOST UNLESS YOU
+                        CHOOSE TO REMOVE THEM.
+                      </p>
+                      <p className="text-yellow-400/60 text-[10px] mt-1">
+                        ({pendingCredentials.length} PENDING)
+                      </p>
+                    </div>
+
+                    <div className="space-y-2">
+                      <label className="flex items-center gap-2 text-yellow-200/90 text-[11px]">
+                        <input
+                          type="radio"
+                          name="registerChoice"
+                          checked={registerChoice === 'pending'}
+                          onChange={() => setRegisterChoice('pending')}
+                        />
+                        DEPLOY A PENDING PASSKEY
+                      </label>
+
+                      {registerChoice === 'pending' && (
+                        <div className="ml-5 space-y-2">
+                          {pendingCredentials.slice(0, 5).map((c) => (
+                            <label key={c.credentialId} className="flex items-start gap-2 text-yellow-200/90 text-[11px]">
+                              <input
+                                type="radio"
+                                name="pendingCredential"
+                                checked={selectedPendingCredentialId === c.credentialId}
+                                onChange={() => setSelectedPendingCredentialId(c.credentialId)}
+                              />
+                              <span>
+                                <span className="font-mono">{formatCredentialIdShort(c.credentialId)}</span>
+                                <span className="text-yellow-400/60"> — {formatAge(c.createdAt)} ({formatCreatedAt(c.createdAt)})</span>
+                              </span>
+                            </label>
+                          ))}
+
+                          <button
+                            onClick={handleDeleteSelectedPending}
+                            disabled={isLoading || !selectedPendingCredentialId}
+                            className="text-yellow-200/80 hover:text-yellow-200 text-[10px] underline disabled:opacity-50"
+                          >
+                            REMOVE SELECTED PENDING PASSKEY
+                          </button>
+                        </div>
+                      )}
+
+                      <label className="flex items-center gap-2 text-yellow-200/90 text-[11px]">
+                        <input
+                          type="radio"
+                          name="registerChoice"
+                          checked={registerChoice === 'new'}
+                          onChange={() => setRegisterChoice('new')}
+                        />
+                        CREATE A NEW PASSKEY
+                      </label>
+                    </div>
                   </div>
                 )}
 
@@ -312,9 +393,9 @@ export function HomePage() {
                   className="btn-retro text-sm w-full disabled:opacity-50"
                 >
                   {isLoading ? (
-                    <AsciiLoader text={isReusingKey ? 'DEPLOYING' : 'CREATING'} />
-                  ) : isReusingKey ? (
-                    'COMPLETE REGISTRATION'
+                    <AsciiLoader text={registerChoice === 'pending' ? 'DEPLOYING' : 'CREATING'} />
+                  ) : registerChoice === 'pending' && pendingCredentials.length > 0 ? (
+                    'DEPLOY SELECTED PASSKEY'
                   ) : (
                     'CREATE PASSKEY'
                   )}

@@ -1,6 +1,7 @@
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { HomePage } from '@/components/HomePage'
 import { AccountPage } from '@/components/AccountPage'
+import { SignerPage } from '@/components/SignerPage'
 import { useWalletStore } from '@/stores/walletStore'
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -25,6 +26,8 @@ export default function App() {
           </ProtectedRoute>
         }
       />
+      {/* Signer popup route - for cross-app transaction signing */}
+      <Route path="/signer" element={<SignerPage />} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   )

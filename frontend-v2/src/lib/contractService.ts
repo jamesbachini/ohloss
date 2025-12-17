@@ -107,13 +107,18 @@ export async function getEpochInfo(epoch: number): Promise<EpochInfo | null> {
 }
 
 export async function getPlayerData(playerAddress: string): Promise<Player | null> {
+  const startTime = Date.now()
+  console.log('[contractService] getPlayerData START:', playerAddress)
   try {
     const client = getBlendizzardClient()
+    console.log('[contractService] getPlayerData - client created')
     const tx = await client.get_player({ player: playerAddress })
+    console.log('[contractService] getPlayerData - tx created, simulating...')
     const result = await tx.simulate()
+    console.log('[contractService] getPlayerData - simulation complete, duration:', Date.now() - startTime, 'ms')
     return result.result.unwrap()
   } catch (error) {
-    console.error(`Error fetching player ${playerAddress}:`, error)
+    console.error(`[contractService] Error fetching player ${playerAddress} (duration: ${Date.now() - startTime}ms):`, error)
     return null
   }
 }
@@ -836,8 +841,9 @@ export const SCALAR_7 = 10_000_000n
 
 /**
  * Format a 7-decimal fixed point number to display string
+ * Uses truncation (not rounding) to never show more than actual value
  */
-export function formatUSDC(amount: bigint, decimals = 2): string {
+export function formatUSDC(amount: bigint, decimals = 4): string {
   const whole = amount / SCALAR_7
   const fraction = amount % SCALAR_7
   const fractionStr = fraction.toString().padStart(7, '0').slice(0, decimals)
@@ -857,7 +863,7 @@ export function parseUSDCInput(amount: string): bigint {
 /**
  * Format XLM (7 decimals like USDC on Stellar)
  */
-export function formatXLM(amount: bigint, decimals = 2): string {
+export function formatXLM(amount: bigint, decimals = 4): string {
   return formatUSDC(amount, decimals)
 }
 

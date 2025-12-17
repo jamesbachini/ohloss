@@ -46,6 +46,39 @@ import { AsciiBackground } from './AsciiBackground'
 import { AsciiLoader } from './AsciiLoader'
 import { SwapPanel } from './SwapPanel'
 
+/**
+ * Calculate potential FP a player would have if they started a game
+ * Formula: free_fp + (vault_balance * 100 * amount_mult * time_mult)
+ *
+ * All values use 7 decimal scaling (SCALAR_7 = 10_000_000)
+ * - vault_balance: 22199997 = 2.2199997 USDC
+ * - freeFpPerEpoch: 1000000000 = 100 FP
+ * - Result: 3219999700 = ~322 FP
+ */
+function calculatePotentialFp(
+  vaultBalance: bigint,
+  amountMultiplier: number,
+  timeMultiplier: number,
+  freeFpPerEpoch: bigint
+): bigint {
+  // If no vault balance, just return free FP
+  if (vaultBalance <= 0n) {
+    return freeFpPerEpoch
+  }
+
+  // deposit_fp = vault_balance * 100 (base FP per USDC) * amount_mult * time_mult
+  // vault_balance is in 7 decimals, baseFp stays in 7 decimals (100 FP per 1 USDC)
+  const baseFp = vaultBalance * 100n
+  const combinedMult = amountMultiplier * timeMultiplier
+  // Don't divide by SCALAR_7 - the result should stay in 7 decimal format
+  const depositFp = BigInt(Math.floor(Number(baseFp) * combinedMult))
+
+  return freeFpPerEpoch + depositFp
+}
+
+// Default free FP per epoch (100 FP with 7 decimals = 1,000,000,000)
+const DEFAULT_FREE_FP = 1_000_000_000n
+
 // Mock game library data
 const MOCK_GAMES = [
   { id: 'coin-flip', name: 'COIN FLIP', status: 'LIVE', players: 142 },
@@ -591,7 +624,16 @@ export function AccountPage() {
               </div>
               <div className="border border-terminal-dim p-4 text-center">
                 <div className="text-terminal-fg text-xl font-bold">
-                  {formatUSDC(epochPlayer?.availableFp || 0n, 0)}
+                  {formatUSDC(
+                    epochPlayer?.availableFp ||
+                    calculatePotentialFp(
+                      vaultBalance,
+                      amountMultiplier,
+                      timeMultiplier,
+                      config?.freeFpPerEpoch || DEFAULT_FREE_FP
+                    ),
+                    0
+                  )}
                 </div>
                 <div className="text-terminal-dim text-[10px] tracking-wider">AVAILABLE FP</div>
               </div>

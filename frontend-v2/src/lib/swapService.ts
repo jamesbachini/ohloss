@@ -9,7 +9,6 @@ import {
   Contract,
   Address,
   nativeToScVal,
-  Account,
   rpc,
 } from '@stellar/stellar-sdk'
 import { getKit } from './smartAccount'
@@ -396,8 +395,9 @@ export function formatXLMAmount(amount: bigint, decimals = 4): string {
 
 /**
  * Format USDC amount (7 decimals) to display string
+ * Uses truncation (not rounding) to never show more than actual value
  */
-export function formatUSDCAmount(amount: bigint, decimals = 2): string {
+export function formatUSDCAmount(amount: bigint, decimals = 4): string {
   const whole = amount / SCALAR_7
   const fraction = amount % SCALAR_7
   const fractionStr = fraction.toString().padStart(7, '0').slice(0, decimals)

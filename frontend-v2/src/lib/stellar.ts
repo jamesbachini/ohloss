@@ -7,6 +7,7 @@ import {
   Address,
   scValToNative,
 } from '@stellar/stellar-sdk'
+import { Client as FeeVaultClient } from 'fee-vault'
 
 const { Server: RpcServer } = rpc
 
@@ -28,6 +29,36 @@ export function getRpc(): InstanceType<typeof RpcServer> {
     rpcInstance = new RpcServer(STELLAR_CONFIG.rpcUrl)
   }
   return rpcInstance
+}
+
+// Singleton FeeVault client for read-only operations
+let feeVaultClient: FeeVaultClient | null = null
+
+function getFeeVaultClient(): FeeVaultClient {
+  if (!feeVaultClient) {
+    feeVaultClient = new FeeVaultClient({
+      contractId: STELLAR_CONFIG.feeVaultContract,
+      networkPassphrase: STELLAR_CONFIG.networkPassphrase,
+      rpcUrl: STELLAR_CONFIG.rpcUrl,
+    })
+  }
+  return feeVaultClient
+}
+
+/**
+ * Get a user's underlying token balance from the fee vault
+ * This returns the actual USDC value, not the vault shares
+ */
+export async function getVaultUnderlyingBalance(address: string): Promise<bigint> {
+  try {
+    const client = getFeeVaultClient()
+    const tx = await client.get_underlying_tokens({ user: address })
+    const result = await tx.simulate()
+    return BigInt(result.result)
+  } catch (error) {
+    console.error('Error fetching vault underlying balance:', error)
+    return 0n
+  }
 }
 
 // =============================================================================
@@ -465,11 +496,11 @@ export function parseI128Balance(data: xdr.LedgerEntryData | null): bigint {
 }
 
 /**
- * Get all balances for an address in a single batched RPC call
+ * Get all balances for an address
  * Returns { xlmBalance, usdcBalance, vaultBalance }
  *
- * Note: getLedgerEntries only returns entries that exist, so we need to
- * match responses by their contract address, not by index.
+ * Note: vaultBalance is fetched via contract simulation (get_underlying_tokens)
+ * to get the actual USDC value, not just the share count.
  */
 export async function getAllBalances(address: string): Promise<{
   xlmBalance: bigint
@@ -479,24 +510,25 @@ export async function getAllBalances(address: string): Promise<{
   const rpcClient = getRpc()
 
   try {
-    // Build all ledger keys
+    // Build ledger keys for token balances
     const keys = [
       buildTokenBalanceKey(STELLAR_CONFIG.nativeTokenContract, address),
       buildTokenBalanceKey(STELLAR_CONFIG.usdcTokenContract, address),
-      buildVaultSharesKey(address),
     ]
 
-    // Single batched RPC call
-    const response = await rpcClient.getLedgerEntries(...keys)
+    // Fetch token balances and vault underlying balance in parallel
+    const [ledgerResponse, vaultBalance] = await Promise.all([
+      rpcClient.getLedgerEntries(...keys),
+      getVaultUnderlyingBalance(address),
+    ])
 
     let xlmBalance = 0n
     let usdcBalance = 0n
-    let vaultBalance = 0n
 
-    if (response.entries) {
+    if (ledgerResponse.entries) {
       // getLedgerEntries only returns existing entries, not in order
       // We need to match by contract address in the returned key
-      for (const entry of response.entries) {
+      for (const entry of ledgerResponse.entries) {
         try {
           const contractData = entry.val.contractData()
           const contractAddress = Address.fromScAddress(contractData.contract()).toString()
@@ -505,8 +537,6 @@ export async function getAllBalances(address: string): Promise<{
             xlmBalance = parseI128Balance(entry.val)
           } else if (contractAddress === STELLAR_CONFIG.usdcTokenContract) {
             usdcBalance = parseI128Balance(entry.val)
-          } else if (contractAddress === STELLAR_CONFIG.feeVaultContract) {
-            vaultBalance = parseI128Balance(entry.val)
           }
         } catch (e) {
           // Entry might not be contract data, skip it
@@ -523,11 +553,11 @@ export async function getAllBalances(address: string): Promise<{
 }
 
 /**
- * Get all player data and balances in a single batched RPC call
- * This combines player, epochPlayer, and all balances into one request
+ * Get all player data and balances
+ * This combines player, epochPlayer, and all balances into parallel requests
  *
- * Note: getLedgerEntries only returns entries that exist, so we need to
- * match responses by their contract address, not by index.
+ * Note: vaultBalance is fetched via contract simulation (get_underlying_tokens)
+ * to get the actual USDC value, not just the share count.
  */
 export async function getPlayerDataAndBalances(
   address: string,
@@ -543,7 +573,7 @@ export async function getPlayerDataAndBalances(
   const contractId = STELLAR_CONFIG.blendizzardContract
 
   try {
-    // Build all ledger keys for a single batched call
+    // Build ledger keys for player data and token balances
     const playerKey = buildStorageKey({ type: 'Player', address })
     const playerLedgerKey = storageKeyToLedgerKey(contractId, playerKey, 'persistent')
 
@@ -559,22 +589,23 @@ export async function getPlayerDataAndBalances(
       epochPlayerLedgerKey,
       buildTokenBalanceKey(STELLAR_CONFIG.nativeTokenContract, address),
       buildTokenBalanceKey(STELLAR_CONFIG.usdcTokenContract, address),
-      buildVaultSharesKey(address),
     ]
 
-    // Single batched RPC call for ALL data
-    const response = await rpcClient.getLedgerEntries(...keys)
+    // Fetch ledger entries and vault underlying balance in parallel
+    const [ledgerResponse, vaultBalance] = await Promise.all([
+      rpcClient.getLedgerEntries(...keys),
+      getVaultUnderlyingBalance(address),
+    ])
 
     let player: Player | null = null
     let epochPlayer: EpochPlayer | null = null
     let xlmBalance = 0n
     let usdcBalance = 0n
-    let vaultBalance = 0n
 
-    if (response.entries) {
+    if (ledgerResponse.entries) {
       // getLedgerEntries only returns existing entries, not in order
       // We need to match by contract address in the returned key
-      for (const entry of response.entries) {
+      for (const entry of ledgerResponse.entries) {
         try {
           const contractData = entry.val.contractData()
           const contractAddress = Address.fromScAddress(contractData.contract()).toString()
@@ -597,8 +628,6 @@ export async function getPlayerDataAndBalances(
             xlmBalance = parseI128Balance(entry.val)
           } else if (contractAddress === STELLAR_CONFIG.usdcTokenContract) {
             usdcBalance = parseI128Balance(entry.val)
-          } else if (contractAddress === STELLAR_CONFIG.feeVaultContract) {
-            vaultBalance = parseI128Balance(entry.val)
           }
         } catch (e) {
           // Entry might not be contract data, skip it
@@ -719,8 +748,9 @@ export const SCALAR_7 = 10_000_000n
 
 /**
  * Format a 7-decimal fixed point number to display string
+ * Uses truncation (not rounding) to never show more than actual value
  */
-export function formatUSDC(amount: bigint, decimals = 2): string {
+export function formatUSDC(amount: bigint, decimals = 4): string {
   const whole = amount / SCALAR_7
   const fraction = amount % SCALAR_7
   const fractionStr = fraction.toString().padStart(7, '0').slice(0, decimals)
@@ -740,6 +770,6 @@ export function parseUSDC(amount: string): bigint {
 /**
  * Format XLM (7 decimals like USDC on Stellar)
  */
-export function formatXLM(amount: bigint, decimals = 2): string {
+export function formatXLM(amount: bigint, decimals = 4): string {
   return formatUSDC(amount, decimals)
 }
