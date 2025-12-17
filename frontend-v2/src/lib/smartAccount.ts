@@ -2,6 +2,7 @@
 // Uses OpenZeppelin's smart-account-kit for WebAuthn passkey-based Stellar smart wallets
 
 import { SmartAccountKit, IndexedDBStorage } from 'smart-account-kit'
+import { launchtubeHeaders } from '../stores/turnstileStore'
 
 // Configuration from environment
 const CONFIG = {
@@ -39,10 +40,13 @@ export function getKit(): SmartAccountKit {
       // Indexer for reverse lookups (credential -> contracts)
       ...(CONFIG.indexerUrl && { indexerUrl: CONFIG.indexerUrl }),
       // Launchtube for fee-sponsored transactions (optional)
+      // The launchtubeHeaders object is shared with turnstileStore and is mutated
+      // when a Turnstile token is obtained, enabling bot protection for submissions
       ...(CONFIG.launchtubeUrl && {
         launchtube: {
           url: CONFIG.launchtubeUrl,
           jwt: CONFIG.launchtubeJwt || undefined,
+          headers: launchtubeHeaders,
         },
       }),
     })
