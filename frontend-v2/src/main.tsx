@@ -5,8 +5,8 @@ import App from './App'
 import './styles/index.css'
 import { turnstileCallback } from './stores/turnstileStore'
 
-// Turnstile site key from environment
-const TURNSTILE_SITE_KEY = import.meta.env.VITE_TURNSTILE_SITE_KEY || ''
+// Turnstile site key from environment (fallback to always-pass invisible for dev)
+const TURNSTILE_SITE_KEY = import.meta.env.VITE_TURNSTILE_SITE_KEY || '1x00000000000000000000AA'
 
 // Cloudflare Turnstile type declarations
 declare global {

@@ -12,7 +12,7 @@
         "react": "^19.2.3",
         "react-dom": "^19.2.3",
         "react-router-dom": "^7.11.0",
-        "smart-account-kit": "^0.2.2",
+        "smart-account-kit": "^0.2.3",
         "zustand": "^5.0.9",
       },
       "devDependencies": {
@@ -542,7 +542,7 @@
 
     "simple-swizzle": ["simple-swizzle@0.2.4", "", { "dependencies": { "is-arrayish": "^0.3.1" } }, "sha512-nAu1WFPQSMNr2Zn9PGSZK9AGn4t/y97lEm+MXTtUDwfP0ksAIX4nO+6ruD9Jwut4C49SB1Ws+fbXsm/yScWOHw=="],
 
-    "smart-account-kit": ["smart-account-kit@0.2.2", "", { "dependencies": { "@simplewebauthn/browser": "^13.2.2", "@stellar/stellar-sdk": ">=14.4.2", "base64url": "^3.0.1", "smart-account-kit-bindings": "0.1.0" }, "peerDependencies": { "@creit-tech/stellar-wallets-kit": ">=2.0.0" }, "optionalPeers": ["@creit-tech/stellar-wallets-kit"] }, "sha512-/z+WwziN+ondgdOeGAuJrg4LxPg77XaPBAIoK7e38MOiQJJc9XSoyc0gja/KGxrrShQwUjaY344luWq1kP09hQ=="],
+    "smart-account-kit": ["smart-account-kit@0.2.3", "", { "dependencies": { "@simplewebauthn/browser": "^13.2.2", "@stellar/stellar-sdk": ">=14.4.2", "base64url": "^3.0.1", "smart-account-kit-bindings": "0.1.0" }, "peerDependencies": { "@creit-tech/stellar-wallets-kit": ">=2.0.0" }, "optionalPeers": ["@creit-tech/stellar-wallets-kit"] }, "sha512-j2/a1KuIJQGF+5THirdUym7YRBySCCSfaDxPNHM7vaqRMNcq85eO03sq3JKvMvRlI9DrkWHgU9wd4dF9aRtfSQ=="],
 
     "smart-account-kit-bindings": ["smart-account-kit-bindings@0.1.0", "", { "dependencies": { "@stellar/stellar-sdk": "^14.4.1", "buffer": "6.0.3" } }, "sha512-iCEIJAMpU0LmrzrEV4fMPLQia58glLWdJMDnKWlE/nm1kreDApS4nhyocP1aMqMcMfqtH8X8eJIFzGAjW0mHFQ=="],
 
