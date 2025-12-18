@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { AsciiBackground } from './AsciiBackground'
 import { AsciiLoader } from './AsciiLoader'
+import { Radio } from '@/components/ui'
 import { useWalletStore } from '@/stores/walletStore'
 import {
   createWallet,
@@ -331,31 +332,31 @@ export function HomePage() {
                     </div>
 
                     <div className="space-y-2">
-                      <label className="flex items-center gap-2 text-yellow-200/90 text-[11px]">
-                        <input
-                          type="radio"
-                          name="registerChoice"
-                          checked={registerChoice === 'pending'}
-                          onChange={() => setRegisterChoice('pending')}
-                        />
-                        DEPLOY A PENDING PASSKEY
-                      </label>
+                      <Radio
+                        name="registerChoice"
+                        checked={registerChoice === 'pending'}
+                        onChange={() => setRegisterChoice('pending')}
+                        label="DEPLOY A PENDING PASSKEY"
+                        labelClassName="text-yellow-200/90 text-[11px]"
+                      />
 
                       {registerChoice === 'pending' && (
                         <div className="ml-5 space-y-2">
                           {pendingCredentials.slice(0, 5).map((c) => (
-                            <label key={c.credentialId} className="flex items-start gap-2 text-yellow-200/90 text-[11px]">
-                              <input
-                                type="radio"
-                                name="pendingCredential"
-                                checked={selectedPendingCredentialId === c.credentialId}
-                                onChange={() => setSelectedPendingCredentialId(c.credentialId)}
-                              />
-                              <span>
-                                <span className="font-mono">{formatCredentialIdShort(c.credentialId)}</span>
-                                <span className="text-yellow-400/60"> — {formatAge(c.createdAt)} ({formatCreatedAt(c.createdAt)})</span>
-                              </span>
-                            </label>
+                            <Radio
+                              key={c.credentialId}
+                              name="pendingCredential"
+                              checked={selectedPendingCredentialId === c.credentialId}
+                              onChange={() => setSelectedPendingCredentialId(c.credentialId)}
+                              label={
+                                <span>
+                                  <span className="font-mono">{formatCredentialIdShort(c.credentialId)}</span>
+                                  <span className="text-yellow-400/60"> — {formatAge(c.createdAt)} ({formatCreatedAt(c.createdAt)})</span>
+                                </span>
+                              }
+                              labelClassName="text-yellow-200/90 text-[11px]"
+                              className="items-start"
+                            />
                           ))}
 
                           <button
@@ -368,15 +369,13 @@ export function HomePage() {
                         </div>
                       )}
 
-                      <label className="flex items-center gap-2 text-yellow-200/90 text-[11px]">
-                        <input
-                          type="radio"
-                          name="registerChoice"
-                          checked={registerChoice === 'new'}
-                          onChange={() => setRegisterChoice('new')}
-                        />
-                        CREATE A NEW PASSKEY
-                      </label>
+                      <Radio
+                        name="registerChoice"
+                        checked={registerChoice === 'new'}
+                        onChange={() => setRegisterChoice('new')}
+                        label="CREATE A NEW PASSKEY"
+                        labelClassName="text-yellow-200/90 text-[11px]"
+                      />
                     </div>
                   </div>
                 )}

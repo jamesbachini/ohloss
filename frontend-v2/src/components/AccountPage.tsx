@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useWalletStore } from '@/stores/walletStore'
+import { Checkbox } from '@/components/ui'
 import {
   useBlendizzardStore,
   getFactionName,
@@ -139,8 +140,6 @@ export function AccountPage() {
   const [actionSuccess, setActionSuccess] = useState<string | null>(null)
   const [addressCopied, setAddressCopied] = useState(false)
 
-  // Mock developer game addresses (in production, this would come from user config)
-  const [devGameAddresses] = useState<string[]>([])
 
   // Try to restore session on mount
   useEffect(() => {
@@ -185,10 +184,10 @@ export function AccountPage() {
   }, [address, isPlayer, currentEpoch, fetchPlayerRewards])
 
   useEffect(() => {
-    if (address && isDeveloper && devGameAddresses.length > 0) {
-      fetchDevRewards(address, devGameAddresses)
+    if (address && isDeveloper) {
+      fetchDevRewards(address)
     }
-  }, [address, isDeveloper, devGameAddresses, currentEpoch, fetchDevRewards])
+  }, [address, isDeveloper, currentEpoch, fetchDevRewards])
 
   // Countdown timer
   useEffect(() => {
@@ -370,7 +369,7 @@ export function AccountPage() {
       if (result.success) {
         setActionSuccess(`Claimed dev reward for epoch ${epoch}!`)
         if (address) {
-          fetchDevRewards(address, devGameAddresses)
+          fetchDevRewards(address)
           fetchAllPlayerData(address)
         }
       } else {
@@ -481,24 +480,18 @@ export function AccountPage() {
             <div className="flex items-center justify-between">
               <span className="text-terminal-dim text-xs tracking-wider">ACCOUNT TYPE:</span>
               <div className="flex items-center gap-6">
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={isPlayer}
-                    onChange={(e) => setIsPlayer(e.target.checked)}
-                    className="accent-terminal-fg"
-                  />
-                  <span className="text-terminal-fg text-xs">I AM A PLAYER</span>
-                </label>
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={isDeveloper}
-                    onChange={(e) => setIsDeveloper(e.target.checked)}
-                    className="accent-terminal-fg"
-                  />
-                  <span className="text-terminal-fg text-xs">I AM A DEVELOPER</span>
-                </label>
+                <Checkbox
+                  checked={isPlayer}
+                  onChange={setIsPlayer}
+                  label="I AM A PLAYER"
+                  labelClassName="text-terminal-fg text-xs"
+                />
+                <Checkbox
+                  checked={isDeveloper}
+                  onChange={setIsDeveloper}
+                  label="I AM A DEVELOPER"
+                  labelClassName="text-terminal-fg text-xs"
+                />
               </div>
             </div>
           </div>
@@ -824,14 +817,7 @@ export function AccountPage() {
                 </span>
               </div>
 
-              {devGameAddresses.length === 0 ? (
-                <div className="text-center py-8">
-                  <p className="text-terminal-dim text-xs">NO GAMES REGISTERED</p>
-                  <p className="text-terminal-dim text-[10px] mt-2">
-                    REGISTER A GAME TO START EARNING DEV FEES
-                  </p>
-                </div>
-              ) : isLoadingRewards ? (
+              {isLoadingRewards ? (
                 <div className="text-center py-8">
                   <AsciiLoader text="LOADING DEV REWARDS" />
                 </div>

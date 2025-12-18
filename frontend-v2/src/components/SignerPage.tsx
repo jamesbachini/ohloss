@@ -13,6 +13,7 @@
 
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { useWalletStore } from '@/stores/walletStore'
+import { Radio } from '@/components/ui'
 import {
   getKit,
   connectWallet,
@@ -1099,37 +1100,34 @@ export function SignerPage() {
                     </div>
 
                     <div className="space-y-2">
-                      <label className="flex items-center gap-2 text-yellow-200/90 text-[11px]">
-                        <input
-                          type="radio"
-                          name="createChoice"
-                          checked={createChoice === 'pending'}
-                          onChange={() => setCreateChoice('pending')}
-                        />
-                        DEPLOY A PENDING PASSKEY
-                      </label>
+                      <Radio
+                        name="createChoice"
+                        checked={createChoice === 'pending'}
+                        onChange={() => setCreateChoice('pending')}
+                        label="DEPLOY A PENDING PASSKEY"
+                        labelClassName="text-yellow-200/90 text-[11px]"
+                      />
 
                       {createChoice === 'pending' && (
                         <div className="ml-5 space-y-2">
                           {pendingCredentials.slice(0, 5).map((c) => (
-                            <label
+                            <Radio
                               key={c.credentialId}
-                              className="flex items-start gap-2 text-yellow-200/90 text-[11px]"
-                            >
-                              <input
-                                type="radio"
-                                name="pendingCredential"
-                                checked={selectedPendingCredentialId === c.credentialId}
-                                onChange={() => setSelectedPendingCredentialId(c.credentialId)}
-                              />
-                              <span>
-                                <span className="font-mono">{formatCredentialIdShort(c.credentialId)}</span>
-                                <span className="text-yellow-400/60">
-                                  {' '}
-                                  — {formatAge(c.createdAt)} ({formatCreatedAt(c.createdAt)})
+                              name="pendingCredential"
+                              checked={selectedPendingCredentialId === c.credentialId}
+                              onChange={() => setSelectedPendingCredentialId(c.credentialId)}
+                              label={
+                                <span>
+                                  <span className="font-mono">{formatCredentialIdShort(c.credentialId)}</span>
+                                  <span className="text-yellow-400/60">
+                                    {' '}
+                                    — {formatAge(c.createdAt)} ({formatCreatedAt(c.createdAt)})
+                                  </span>
                                 </span>
-                              </span>
-                            </label>
+                              }
+                              labelClassName="text-yellow-200/90 text-[11px]"
+                              className="items-start"
+                            />
                           ))}
 
                           <div className="grid grid-cols-2 gap-2 pt-1">
@@ -1159,15 +1157,13 @@ export function SignerPage() {
                         </div>
                       )}
 
-                      <label className="flex items-center gap-2 text-yellow-200/90 text-[11px]">
-                        <input
-                          type="radio"
-                          name="createChoice"
-                          checked={createChoice === 'new'}
-                          onChange={() => setCreateChoice('new')}
-                        />
-                        CREATE A NEW PASSKEY
-                      </label>
+                      <Radio
+                        name="createChoice"
+                        checked={createChoice === 'new'}
+                        onChange={() => setCreateChoice('new')}
+                        label="CREATE A NEW PASSKEY"
+                        labelClassName="text-yellow-200/90 text-[11px]"
+                      />
                     </div>
                   </div>
                 )}

@@ -86,7 +86,7 @@ interface BlendizzardState {
   /** Refresh balances only (for manual refresh buttons) */
   refreshBalances: (address: string) => Promise<void>
   fetchPlayerRewards: (address: string) => Promise<void>
-  fetchDevRewards: (address: string, gameAddresses: string[]) => Promise<void>
+  fetchDevRewards: (address: string) => Promise<void>
   /** Refresh faction standings and check for epoch changes. Returns true if epoch changed. */
   refreshFactionStandings: () => Promise<boolean>
   reset: () => void
@@ -542,10 +542,10 @@ export const useBlendizzardStore = create<BlendizzardState>()(
         }
       },
 
-      fetchDevRewards: async (_address: string, gameAddresses: string[]) => {
+      fetchDevRewards: async (address: string) => {
         const { currentEpoch } = get()
 
-        if (currentEpoch === null || currentEpoch < 1 || gameAddresses.length === 0) {
+        if (currentEpoch === null || currentEpoch < 1) {
           set({ devRewards: [] })
           return
         }
@@ -555,61 +555,45 @@ export const useBlendizzardStore = create<BlendizzardState>()(
         try {
           const contractId = STELLAR_CONFIG.blendizzardContract
 
-          // Calculate epochs to fetch
+          // Calculate epochs to fetch (last 100 finalized epochs)
           const startEpoch = Math.max(0, currentEpoch - EPOCHS_TO_FETCH)
+          const epochsToFetch = currentEpoch - startEpoch
 
-          // Build ledger keys for EpochGame data for each epoch and game
+          // Build ledger keys for EpochGame data for each epoch
+          // Use the connected address as the game address (assuming user is the game developer)
           const keys: xdr.LedgerKey[] = []
-          const keyMetadata: { epoch: number; gameAddress: string }[] = []
-
           for (let epoch = startEpoch; epoch < currentEpoch; epoch++) {
-            for (const gameAddress of gameAddresses) {
-              // EpochGame key
-              const epochGameKey = buildStorageKey({
-                type: 'EpochGame',
-                epoch,
-                address: gameAddress,
-              })
-              keys.push(storageKeyToLedgerKey(contractId, epochGameKey, 'temporary'))
-              keyMetadata.push({ epoch, gameAddress })
-            }
-          }
+            // EpochGame key (using connected address as game address)
+            const epochGameKey = buildStorageKey({
+              type: 'EpochGame',
+              epoch,
+              address,
+            })
+            keys.push(storageKeyToLedgerKey(contractId, epochGameKey, 'temporary'))
 
-          // Also fetch epoch info for each epoch (for reward pool calculation)
-          const epochInfoKeys: xdr.LedgerKey[] = []
-          for (let epoch = startEpoch; epoch < currentEpoch; epoch++) {
+            // Epoch info key (to get dev reward pool and total game FP)
             const epochKey = buildStorageKey({ type: 'Epoch', epoch })
-            epochInfoKeys.push(storageKeyToLedgerKey(contractId, epochKey, 'temporary'))
+            keys.push(storageKeyToLedgerKey(contractId, epochKey, 'temporary'))
           }
 
           // Batch fetch all data
-          const [gameResults, epochResults] = await Promise.all([
-            batchGetLedgerEntriesOrdered(keys, (data) => data),
-            batchGetLedgerEntriesOrdered(epochInfoKeys, (data) => data),
-          ])
+          const results = await batchGetLedgerEntriesOrdered(
+            keys,
+            (data) => data // Return raw data for custom parsing
+          )
 
-          // Build epoch info map
-          const epochInfoMap = new Map<number, EpochInfo>()
-          for (let i = 0; i < epochResults.length; i++) {
-            const epoch = startEpoch + i
-            const data = epochResults[i]
-            if (data) {
-              const info = parseEpochInfo(data)
-              if (info) epochInfoMap.set(epoch, info)
-            }
-          }
-
-          // Process game results
+          // Process results
           const rewards: DevClaimableReward[] = []
 
-          for (let i = 0; i < gameResults.length; i++) {
-            const data = gameResults[i]
-            const meta = keyMetadata[i]
+          for (let i = 0; i < epochsToFetch; i++) {
+            const epoch = startEpoch + i
+            const epochGameData = results[i * 2]
+            const epochInfoData = results[i * 2 + 1]
 
-            if (!data || !meta) continue
+            if (!epochGameData || !epochInfoData) continue
 
-            const epochGame = parseEpochGame(data)
-            const epochInfo = epochInfoMap.get(meta.epoch)
+            const epochGame = parseEpochGame(epochGameData)
+            const epochInfo = parseEpochInfo(epochInfoData)
 
             if (!epochGame || !epochInfo) continue
 
@@ -622,8 +606,8 @@ export const useBlendizzardStore = create<BlendizzardState>()(
 
               if (estimatedReward > 0n) {
                 rewards.push({
-                  epoch: meta.epoch,
-                  gameAddress: meta.gameAddress,
+                  epoch,
+                  gameAddress: address,
                   amount: estimatedReward,
                   fpContributed: epochGame.totalFpContributed,
                 })
