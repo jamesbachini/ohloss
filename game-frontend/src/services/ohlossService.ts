@@ -24,69 +24,81 @@ const RPC_URL = import.meta.env.VITE_RPC_URL || 'https://rpc.lightsail.network'
 const NETWORK_PASSPHRASE = import.meta.env.VITE_NETWORK_PASSPHRASE || 'Public Global Stellar Network ; September 2015'
 
 // =============================================================================
-// Multiplier calculation constants (matching contract)
+// Multiplier calculation constants (matching contract types.rs)
 // =============================================================================
 
-const SCALAR_7 = 10_000_000n
 const TARGET_AMOUNT_USD = 1000_0000000n // $1,000 with 7 decimals
 const MAX_AMOUNT_USD = 10_000_0000000n // $10,000 with 7 decimals
 const TARGET_TIME_SECONDS = 35n * 24n * 60n * 60n // 35 days
 const MAX_TIME_SECONDS = 245n * 24n * 60n * 60n // 245 days
-const COMPONENT_PEAK = 2_4494897n // sqrt(6) with 7 decimals
+const COMPONENT_PEAK = 2.4494897 // sqrt(6) - peak multiplier for each component
 const DEFAULT_FREE_FP = 100_0000000n // 100 FP with 7 decimals
 
 // =============================================================================
-// Multiplier calculations
+// Multiplier calculations (matching contract faction_points.rs)
+// Uses Hermite cubic spline: h(t) = 3t² - 2t³
 // =============================================================================
 
 /**
- * Calculate amount multiplier using asymptotic curve
- * Peaks at $1,000, returns to 1.0x at $10,000+
+ * Hermite basis function: h(t) = 3t² - 2t³
+ * Provides smooth acceleration/deceleration with zero derivatives at endpoints.
+ */
+function hermiteBasis(t: number): number {
+  return 3 * t * t - 2 * t * t * t
+}
+
+/**
+ * Calculate amount multiplier using smooth piecewise (cubic Hermite spline)
+ * Matches contract logic in faction_points.rs:calculate_amount_multiplier
  */
 function calculateAmountMultiplier(amount: bigint): number {
   if (amount <= 0n) return 1.0
 
   if (amount <= TARGET_AMOUNT_USD) {
-    // Rising phase: 1.0 → peak
-    const ratio = Number(amount) / Number(TARGET_AMOUNT_USD)
-    const mult = 1.0 + (Number(COMPONENT_PEAK) / Number(SCALAR_7) - 1.0) * ratio
-    return mult
-  } else if (amount < MAX_AMOUNT_USD) {
-    // Falling phase: peak → 1.0
-    const numerator = Number(amount - TARGET_AMOUNT_USD)
-    const denominator = Number(MAX_AMOUNT_USD - TARGET_AMOUNT_USD)
-    const ratio = numerator / denominator
-    const mult = Number(COMPONENT_PEAK) / Number(SCALAR_7) - (Number(COMPONENT_PEAK) / Number(SCALAR_7) - 1.0) * ratio
-    return mult
-  } else {
-    // Beyond max: 1.0x
-    return 1.0
+    // Rising segment: 1.0 → COMPONENT_PEAK
+    const t = Number(amount) / Number(TARGET_AMOUNT_USD)
+    const h = hermiteBasis(t)
+    return 1.0 + h * (COMPONENT_PEAK - 1.0)
   }
+
+  if (amount < MAX_AMOUNT_USD) {
+    // Falling segment: COMPONENT_PEAK → 1.0
+    const excess = Number(amount - TARGET_AMOUNT_USD)
+    const range = Number(MAX_AMOUNT_USD - TARGET_AMOUNT_USD)
+    const t = excess / range
+    const h = hermiteBasis(t)
+    return COMPONENT_PEAK - h * (COMPONENT_PEAK - 1.0)
+  }
+
+  // Beyond max: 1.0x
+  return 1.0
 }
 
 /**
- * Calculate time multiplier using asymptotic curve
- * Peaks at 35 days, returns to 1.0x at 245 days+
+ * Calculate time multiplier using smooth piecewise (cubic Hermite spline)
+ * Matches contract logic in faction_points.rs:calculate_time_multiplier
  */
 function calculateTimeMultiplier(timeHeldSeconds: bigint): number {
   if (timeHeldSeconds <= 0n) return 1.0
 
   if (timeHeldSeconds <= TARGET_TIME_SECONDS) {
-    // Rising phase: 1.0 → peak
-    const ratio = Number(timeHeldSeconds) / Number(TARGET_TIME_SECONDS)
-    const mult = 1.0 + (Number(COMPONENT_PEAK) / Number(SCALAR_7) - 1.0) * ratio
-    return mult
-  } else if (timeHeldSeconds < MAX_TIME_SECONDS) {
-    // Falling phase: peak → 1.0
-    const numerator = Number(timeHeldSeconds - TARGET_TIME_SECONDS)
-    const denominator = Number(MAX_TIME_SECONDS - TARGET_TIME_SECONDS)
-    const ratio = numerator / denominator
-    const mult = Number(COMPONENT_PEAK) / Number(SCALAR_7) - (Number(COMPONENT_PEAK) / Number(SCALAR_7) - 1.0) * ratio
-    return mult
-  } else {
-    // Beyond max: 1.0x
-    return 1.0
+    // Rising segment: 1.0 → COMPONENT_PEAK
+    const t = Number(timeHeldSeconds) / Number(TARGET_TIME_SECONDS)
+    const h = hermiteBasis(t)
+    return 1.0 + h * (COMPONENT_PEAK - 1.0)
   }
+
+  if (timeHeldSeconds < MAX_TIME_SECONDS) {
+    // Falling segment: COMPONENT_PEAK → 1.0
+    const excess = Number(timeHeldSeconds - TARGET_TIME_SECONDS)
+    const range = Number(MAX_TIME_SECONDS - TARGET_TIME_SECONDS)
+    const t = excess / range
+    const h = hermiteBasis(t)
+    return COMPONENT_PEAK - h * (COMPONENT_PEAK - 1.0)
+  }
+
+  // Beyond max: 1.0x
+  return 1.0
 }
 
 /**
