@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useWalletStore } from '@/stores/walletStore'
 import { Checkbox } from '@/components/ui'
 import {
-  useBlendizzardStore,
+  useOhlossStore,
   getFactionName,
   getFactionSymbol,
   getEpochTimeRemaining,
@@ -11,7 +11,7 @@ import {
   formatTimeRemaining,
   getTotalPlayerRewards,
   getTotalDevRewards,
-} from '@/stores/blendizzardStore'
+} from '@/stores/ohlossStore'
 
 // Refresh icon component
 function RefreshIcon({ spinning = false }: { spinning?: boolean }) {
@@ -130,7 +130,7 @@ export function AccountPage() {
     fetchAllRewards,
     refreshFactionStandings,
     reset,
-  } = useBlendizzardStore()
+  } = useOhlossStore()
 
   // Local state
   const [timeRemaining, setTimeRemaining] = useState(0)
@@ -143,6 +143,8 @@ export function AccountPage() {
   const [loadingGameStats, setLoadingGameStats] = useState(false)
   const [pendingFaction, setPendingFaction] = useState<number | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [claimingPlayerEpoch, setClaimingPlayerEpoch] = useState<number | null>(null)
+  const [claimingDevEpoch, setClaimingDevEpoch] = useState<number | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
   const [actionSuccess, setActionSuccess] = useState<string | null>(null)
   const [addressCopied, setAddressCopied] = useState(false)
@@ -369,40 +371,46 @@ export function AccountPage() {
   const handleClaimPlayerReward = async (epoch: number) => {
     if (!address) return
     clearMessages()
-    setIsSubmitting(true)
+    setClaimingPlayerEpoch(epoch)
     try {
       const result = await claimEpochReward(address, epoch)
       if (result.success) {
         setActionSuccess(`Claimed reward for epoch ${epoch}!`)
-        fetchAllRewards(address, true, false)
-        fetchAllPlayerData(address)
+        // Refresh rewards list and vault balance (player rewards are deposited to vault)
+        await Promise.all([
+          fetchAllRewards(address, true, false),
+          fetchAllPlayerData(address),
+        ])
       } else {
         setActionError(result.error || 'Failed to claim reward')
       }
     } catch (err) {
       setActionError(err instanceof Error ? err.message : 'Failed to claim reward')
     } finally {
-      setIsSubmitting(false)
+      setClaimingPlayerEpoch(null)
     }
   }
 
   const handleClaimDevReward = async (epoch: number) => {
     if (!address) return
     clearMessages()
-    setIsSubmitting(true)
+    setClaimingDevEpoch(epoch)
     try {
       const result = await claimDevReward(address, epoch)
       if (result.success) {
         setActionSuccess(`Claimed dev reward for epoch ${epoch}!`)
-        fetchAllRewards(address, false, true)
-        fetchAllPlayerData(address)
+        // Refresh rewards list and wallet balance (dev rewards go directly to wallet)
+        await Promise.all([
+          fetchAllRewards(address, false, true),
+          fetchAllPlayerData(address),
+        ])
       } else {
         setActionError(result.error || 'Failed to claim dev reward')
       }
     } catch (err) {
       setActionError(err instanceof Error ? err.message : 'Failed to claim dev reward')
     } finally {
-      setIsSubmitting(false)
+      setClaimingDevEpoch(null)
     }
   }
 
@@ -812,10 +820,14 @@ export function AccountPage() {
                         </span>
                         <button
                           onClick={() => handleClaimPlayerReward(reward.epoch)}
-                          disabled={isSubmitting || !canClaimRewards}
-                          className="text-xs border border-terminal-dim px-3 py-1 hover:bg-terminal-fg/10 disabled:opacity-50"
+                          disabled={claimingPlayerEpoch !== null || !canClaimRewards}
+                          className="text-xs border border-terminal-dim px-3 py-1 hover:bg-terminal-fg/10 disabled:opacity-50 min-w-[70px]"
                         >
-                          CLAIM
+                          {claimingPlayerEpoch === reward.epoch ? (
+                            <AsciiLoader text="" />
+                          ) : (
+                            'CLAIM'
+                          )}
                         </button>
                       </div>
                     </div>
@@ -868,10 +880,14 @@ export function AccountPage() {
                         </span>
                         <button
                           onClick={() => handleClaimDevReward(reward.epoch)}
-                          disabled={isSubmitting}
-                          className="text-xs border border-terminal-dim px-3 py-1 hover:bg-terminal-fg/10 disabled:opacity-50"
+                          disabled={claimingDevEpoch !== null}
+                          className="text-xs border border-terminal-dim px-3 py-1 hover:bg-terminal-fg/10 disabled:opacity-50 min-w-[70px]"
                         >
-                          CLAIM
+                          {claimingDevEpoch === reward.epoch ? (
+                            <AsciiLoader text="" />
+                          ) : (
+                            'CLAIM'
+                          )}
                         </button>
                       </div>
                     </div>

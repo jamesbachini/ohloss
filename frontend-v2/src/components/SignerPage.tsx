@@ -12,6 +12,7 @@
  */
 
 import { useEffect, useState, useCallback, useRef } from 'react'
+import { xdr, Address } from '@stellar/stellar-sdk'
 import { useWalletStore } from '@/stores/walletStore'
 import { Radio } from '@/components/ui'
 import {
@@ -30,7 +31,7 @@ import {
   formatCredentialIdShort,
 } from '@/lib/pendingPasskeys'
 import { getPlayerData, selectFaction } from '@/lib/contractService'
-import { getFactionName, getFactionSymbol, FACTION_NAMES } from '@/stores/blendizzardStore'
+import { getFactionName, getFactionSymbol, FACTION_NAMES } from '@/stores/ohlossStore'
 
 // Message types (matching game-frontend/src/types/messages.ts)
 interface BaseMessage {
@@ -798,7 +799,6 @@ export function SignerPage() {
         }
       }
 
-      const { xdr, Address } = await import('@stellar/stellar-sdk')
       type XdrOperation = ReturnType<typeof xdr.Operation.read>
       type XdrAuthEntry = ReturnType<typeof xdr.SorobanAuthorizationEntry.read>
 
