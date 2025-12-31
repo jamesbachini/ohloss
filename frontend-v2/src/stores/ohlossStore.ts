@@ -489,16 +489,17 @@ export const useOhlossStore = create<OhlossState>()(
           const epochsToFetch = currentEpoch - startEpoch
 
           // Build ledger keys - share EpochInfo across both player and dev rewards
-          // Order: For each epoch: [EpochInfo, EpochPlayer?, EpochGame?]
+          // Order: For each epoch: [EpochInfo, EpochPlayer?, Claimed?, EpochGame?, DevClaimed?]
           const keys: xdr.LedgerKey[] = []
-          const keysPerEpoch = 1 + (fetchPlayer ? 1 : 0) + (fetchDev ? 1 : 0)
+          // Each type requires 2 keys (data + claimed status)
+          const keysPerEpoch = 1 + (fetchPlayer ? 2 : 0) + (fetchDev ? 2 : 0)
 
           for (let epoch = startEpoch; epoch < currentEpoch; epoch++) {
             // Always fetch EpochInfo (shared between player and dev rewards)
             const epochKey = buildStorageKey({ type: 'Epoch', epoch })
             keys.push(storageKeyToLedgerKey(contractId, epochKey, 'temporary'))
 
-            // EpochPlayer key (if fetching player rewards)
+            // EpochPlayer + Claimed keys (if fetching player rewards)
             if (fetchPlayer) {
               const epochPlayerKey = buildStorageKey({
                 type: 'EpochPlayer',
@@ -506,9 +507,17 @@ export const useOhlossStore = create<OhlossState>()(
                 address,
               })
               keys.push(storageKeyToLedgerKey(contractId, epochPlayerKey, 'temporary'))
+
+              // Claimed key to check if reward was already claimed
+              const claimedKey = buildStorageKey({
+                type: 'Claimed',
+                address,
+                epoch,
+              })
+              keys.push(storageKeyToLedgerKey(contractId, claimedKey, 'temporary'))
             }
 
-            // EpochGame key (if fetching dev rewards)
+            // EpochGame + DevClaimed keys (if fetching dev rewards)
             if (fetchDev) {
               const epochGameKey = buildStorageKey({
                 type: 'EpochGame',
@@ -516,6 +525,14 @@ export const useOhlossStore = create<OhlossState>()(
                 address,
               })
               keys.push(storageKeyToLedgerKey(contractId, epochGameKey, 'temporary'))
+
+              // DevClaimed key to check if dev reward was already claimed
+              const devClaimedKey = buildStorageKey({
+                type: 'DevClaimed',
+                address,
+                epoch,
+              })
+              keys.push(storageKeyToLedgerKey(contractId, devClaimedKey, 'temporary'))
             }
           }
 
@@ -540,10 +557,15 @@ export const useOhlossStore = create<OhlossState>()(
             const epochInfo = parseEpochInfo(epochInfoData)
             if (!epochInfo || !epochInfo.isFinalized) continue
 
-            // Parse EpochPlayer (if fetching player rewards)
+            // Parse EpochPlayer and check Claimed status (if fetching player rewards)
             if (fetchPlayer) {
-              const epochPlayerData = results[baseIdx + 1]
-              if (epochPlayerData) {
+              const epochPlayerIdx = baseIdx + 1
+              const claimedIdx = baseIdx + 2
+              const epochPlayerData = results[epochPlayerIdx]
+              const claimedData = results[claimedIdx]
+
+              // Skip if already claimed (claimedData exists means reward was claimed)
+              if (epochPlayerData && !claimedData) {
                 const epochPlayer = parseEpochPlayer(epochPlayerData)
                 if (
                   epochPlayer &&
@@ -566,11 +588,15 @@ export const useOhlossStore = create<OhlossState>()(
               }
             }
 
-            // Parse EpochGame (if fetching dev rewards)
+            // Parse EpochGame and check DevClaimed status (if fetching dev rewards)
             if (fetchDev) {
-              const epochGameIdx = baseIdx + (fetchPlayer ? 2 : 1)
+              const epochGameIdx = baseIdx + (fetchPlayer ? 3 : 1)
+              const devClaimedIdx = baseIdx + (fetchPlayer ? 4 : 2)
               const epochGameData = results[epochGameIdx]
-              if (epochGameData) {
+              const devClaimedData = results[devClaimedIdx]
+
+              // Skip if already claimed (devClaimedData exists means reward was claimed)
+              if (epochGameData && !devClaimedData) {
                 const epochGame = parseEpochGame(epochGameData)
                 if (epochGame && epochGame.totalFpContributed > 0n && epochInfo.totalGameFp > 0n) {
                   const estimatedReward =
