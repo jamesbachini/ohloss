@@ -376,8 +376,11 @@ export function AccountPage() {
       const result = await claimEpochReward(address, epoch)
       if (result.success) {
         setActionSuccess(`Claimed reward for epoch ${epoch}!`)
-        fetchAllRewards(address, true, false)
-        fetchAllPlayerData(address)
+        // Refresh rewards list and vault balance (player rewards are deposited to vault)
+        await Promise.all([
+          fetchAllRewards(address, true, false),
+          fetchAllPlayerData(address),
+        ])
       } else {
         setActionError(result.error || 'Failed to claim reward')
       }
@@ -396,8 +399,11 @@ export function AccountPage() {
       const result = await claimDevReward(address, epoch)
       if (result.success) {
         setActionSuccess(`Claimed dev reward for epoch ${epoch}!`)
-        fetchAllRewards(address, false, true)
-        fetchAllPlayerData(address)
+        // Refresh rewards list and wallet balance (dev rewards go directly to wallet)
+        await Promise.all([
+          fetchAllRewards(address, false, true),
+          fetchAllPlayerData(address),
+        ])
       } else {
         setActionError(result.error || 'Failed to claim dev reward')
       }
