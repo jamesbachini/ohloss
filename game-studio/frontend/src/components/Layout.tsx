@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { WalletSwitcher } from './WalletSwitcher';
 import { DocumentationContent, type DocSection } from '../pages/Resources';
 import { ExternalLink, Github } from 'lucide-react';
+import { AsciiBackground } from './AsciiBackground';
 import './Layout.css';
 import '../pages/Resources.css';
 
@@ -18,6 +19,7 @@ export function Layout({ children }: LayoutProps) {
 
   return (
     <div className="layout">
+      <AsciiBackground />
       {/* Header */}
       <header className="layout-header">
         <div className="header-content">

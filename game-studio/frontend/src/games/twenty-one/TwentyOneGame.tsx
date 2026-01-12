@@ -43,10 +43,10 @@ const PlayingCard = ({ value, isHidden = false }: { value: number; isHidden?: bo
     // Distribute cards across suits for visual variety
     const suitIndex = (val - 1) % 4;
     const suits = [
-      { symbol: '♠', color: 'text-gray-900', name: 'Spades' },
-      { symbol: '♥', color: 'text-red-600', name: 'Hearts' },
-      { symbol: '♣', color: 'text-gray-900', name: 'Clubs' },
-      { symbol: '♦', color: 'text-red-600', name: 'Diamonds' },
+      { symbol: '♠', color: 'text-[#111827]', name: 'Spades' },
+      { symbol: '♥', color: 'text-[#dc2626]', name: 'Hearts' },
+      { symbol: '♣', color: 'text-[#111827]', name: 'Clubs' },
+      { symbol: '♦', color: 'text-[#dc2626]', name: 'Diamonds' },
     ];
     return suits[suitIndex];
   };
@@ -63,7 +63,7 @@ const PlayingCard = ({ value, isHidden = false }: { value: number; isHidden?: bo
   const suit = getSuit(value);
 
   return (
-    <div className="relative w-20 h-28 rounded-lg bg-white shadow-xl border-2 border-gray-300 transform transition-all hover:scale-105 animate-dealCard overflow-hidden">
+    <div className="relative w-20 h-28 rounded-lg bg-[#ffffff] shadow-xl border-2 border-gray-300 transform transition-all hover:scale-105 animate-dealCard overflow-hidden">
       {/* Center suit (single symbol) */}
       <div className={`absolute inset-0 flex items-center justify-center text-5xl leading-none ${suit.color} pointer-events-none select-none`}>
         {suit.symbol}

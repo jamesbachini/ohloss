@@ -9,13 +9,13 @@
 /* Sidebar Navigation */
 .resources-sidebar {
   width: 280px;
-  background: rgb(var(--color-panel-rgb) / 0.95);
-  border-right: 1px solid var(--color-border);
+  background: rgb(var(--color-bg-rgb) / 0.8);
+  border-right: 1px solid #aaa;
   overflow-y: auto;
   position: sticky;
   top: 0;
   height: calc(100vh - 120px);
-  box-shadow: 2px 0 0 rgba(0, 0, 0, 0.8);
+  box-shadow: none;
 }
 
 .sidebar-content {
@@ -50,7 +50,7 @@
   font-weight: 500;
   text-align: left;
   cursor: pointer;
-  border-radius: 0.35rem;
+  border-radius: 0;
   transition: all 0.15s ease;
   position: relative;
   text-transform: uppercase;
@@ -58,16 +58,16 @@
 }
 
 .nav-item:hover {
-  background: rgb(var(--color-panel-rgb) / 0.6);
+  background: rgb(var(--color-bg-rgb) / 0.6);
   color: var(--color-fg);
-  border-color: var(--color-border);
+  border-color: var(--color-fg);
 }
 
 .nav-item.active {
   background: var(--color-fg);
   color: var(--color-bg);
   font-weight: 600;
-  box-shadow: 2px 2px 0 rgba(0, 0, 0, 0.9);
+  box-shadow: none;
 }
 
 .nav-item.active .nav-icon {
@@ -76,8 +76,8 @@
 
 .nav-item.external {
   color: var(--color-fg);
-  background: rgb(var(--color-panel-rgb) / 0.7);
-  border: 1px solid var(--color-border);
+  background: rgb(var(--color-bg-rgb) / 0.7);
+  border: 1px solid var(--color-fg);
 }
 
 .nav-item.external:hover {
@@ -107,7 +107,7 @@
 
 .sidebar-divider {
   height: 1px;
-  background: linear-gradient(to right, transparent, var(--color-border), transparent);
+  background: linear-gradient(to right, transparent, var(--color-fg), transparent);
   margin: 2rem 0;
 }
 
@@ -122,11 +122,11 @@
 
 /* Documentation Section */
 .doc-section {
-  background: rgb(var(--color-panel-rgb) / 0.95);
-  border-radius: 0.75rem;
+  background: rgb(var(--color-bg-rgb) / 0.9);
+  border-radius: 0;
   padding: 3rem;
-  border: 1px solid var(--color-border);
-  box-shadow: 2px 2px 0 rgba(0, 0, 0, 0.9);
+  border: 1px solid var(--color-fg);
+  box-shadow: none;
 }
 
 .doc-title {
@@ -160,7 +160,7 @@
   color: var(--color-fg);
   margin-bottom: 1rem;
   padding-bottom: 0.75rem;
-  border-bottom: 1px solid var(--color-border);
+  border-bottom: 1px solid var(--color-fg);
   text-transform: uppercase;
   letter-spacing: 0.08em;
 }
@@ -199,24 +199,24 @@
 }
 
 .content-block code {
-  background: var(--color-panel-strong);
+  background: var(--color-bg);
   color: var(--color-fg);
   padding: 0.2rem 0.4rem;
-  border-radius: 0.25rem;
-  border: 1px solid var(--color-border);
+  border-radius: 0;
+  border: 1px solid var(--color-fg);
   font-family: var(--font-mono);
   font-size: 0.85rem;
 }
 
 /* Code Blocks */
 .code-block {
-  background: #0c0c0c;
-  border-radius: 0.5rem;
+  background: #050505;
+  border-radius: 0;
   padding: 1.5rem;
   overflow-x: auto;
   margin: 1.5rem 0;
-  box-shadow: inset 0 0 0 1px var(--color-border);
-  border: 1px solid var(--color-border);
+  box-shadow: none;
+  border: 1px solid #aaa;
 }
 
 .code-block pre {
@@ -228,6 +228,7 @@
   background: transparent;
   color: var(--color-fg);
   padding: 0;
+  border: none;
   font-family: var(--font-mono);
   font-size: 0.85rem;
   line-height: 1.7;
@@ -237,9 +238,9 @@
 
 /* Info Box */
 .info-box {
-  background: rgb(var(--color-info-rgb) / 0.08);
-  border-left: 3px solid var(--color-info);
-  border-radius: 0.5rem;
+  background: var(--color-bg);
+  border-left: 3px solid var(--color-fg);
+  border-radius: 0;
   padding: 1.5rem;
   margin: 1.5rem 0;
   display: flex;
@@ -275,9 +276,9 @@
 
 /* Warning Box */
 .warning-box {
-  background: rgb(var(--color-warning-rgb) / 0.08);
-  border-left: 3px solid var(--color-warning);
-  border-radius: 0.5rem;
+  background: var(--color-bg);
+  border-left: 3px solid var(--color-fg);
+  border-radius: 0;
   padding: 1.5rem;
   margin: 1.5rem 0;
   display: flex;
@@ -313,9 +314,9 @@
   display: flex;
   gap: 1rem;
   padding: 1.5rem;
-  background: var(--color-panel);
-  border: 1px solid var(--color-border);
-  border-radius: 0.5rem;
+  background: var(--color-bg);
+  border: 1px solid var(--color-fg);
+  border-radius: 0;
   transition: all 0.2s ease;
   text-decoration: none;
   cursor: pointer;
@@ -324,7 +325,7 @@
 .step-card:hover {
   transform: translateY(-2px);
   border-color: var(--color-fg);
-  box-shadow: 2px 2px 0 rgba(0, 0, 0, 0.9);
+  box-shadow: none;
 }
 
 .step-icon {
@@ -359,7 +360,7 @@
     height: auto;
     position: static;
     border-right: none;
-    border-bottom: 1px solid var(--color-border);
+    border-bottom: 1px solid #aaa;
   }
 
   .resources-content {

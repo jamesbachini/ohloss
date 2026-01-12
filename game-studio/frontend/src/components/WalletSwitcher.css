@@ -16,10 +16,10 @@
   align-items: center;
   gap: 0.75rem;
   padding: 0.75rem 1rem;
-  background: var(--color-panel);
-  border: 1px solid var(--color-border);
-  border-radius: 0.5rem;
-  box-shadow: 2px 2px 0 rgba(0, 0, 0, 0.9);
+  background: var(--color-bg);
+  border: 1px solid var(--color-fg);
+  border-radius: 0;
+  box-shadow: none;
   transition: all 0.2s ease;
 }
 
@@ -28,13 +28,13 @@
 }
 
 .wallet-status.connected {
-  background: rgb(var(--color-success-rgb) / 0.12);
-  border-color: rgb(var(--color-success-rgb) / 0.4);
+  background: var(--color-bg);
+  border-color: var(--color-fg);
 }
 
 .wallet-status.connecting {
-  background: rgb(var(--color-warning-rgb) / 0.12);
-  border-color: rgb(var(--color-warning-rgb) / 0.4);
+  background: var(--color-bg);
+  border-color: var(--color-fg);
 }
 
 .status-indicator {
@@ -95,10 +95,10 @@
 
 .switch-button {
   padding: 0.65rem 1.1rem;
-  background: transparent;
+  background: var(--color-bg);
   color: var(--color-fg);
   border: 1px solid var(--color-fg);
-  border-radius: 0.35rem;
+  border-radius: 0;
   font-weight: 600;
   font-size: 0.75rem;
   cursor: pointer;
@@ -120,12 +120,12 @@
 }
 
 .wallet-error {
-  background: rgb(var(--color-error-rgb) / 0.12);
+  background: var(--color-bg);
   color: var(--color-error);
   padding: 0.75rem 1rem;
-  border-radius: 0.5rem;
-  border: 1px solid rgb(var(--color-error-rgb) / 0.4);
-  box-shadow: 2px 2px 0 rgba(0, 0, 0, 0.9);
+  border-radius: 0;
+  border: 1px solid var(--color-fg);
+  box-shadow: none;
 }
 
 .error-title {

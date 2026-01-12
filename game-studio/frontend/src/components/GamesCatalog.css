@@ -3,12 +3,12 @@
 }
 
 .catalog-header {
-  background: rgb(var(--color-panel-rgb) / 0.9);
-  border-radius: 0.75rem;
+  background: var(--color-bg);
+  border-radius: 0;
   padding: 2rem;
   margin-bottom: 1rem;
-  border: 1px solid var(--color-border);
-  box-shadow: 2px 2px 0 rgba(0, 0, 0, 0.9);
+  border: 1px solid var(--color-fg);
+  box-shadow: none;
 }
 
 .catalog-title {
@@ -56,18 +56,18 @@
 
 .game-card {
   position: relative;
-  background: var(--color-panel);
-  border-radius: 0.75rem;
+  background: var(--color-bg);
+  border-radius: 0;
   padding: 1.5rem;
-  border: 1px solid var(--color-border);
-  box-shadow: 2px 2px 0 rgba(0, 0, 0, 0.9);
+  border: 1px solid var(--color-fg);
+  box-shadow: none;
   transition: all 0.2s ease;
   overflow: hidden;
 }
 
 .game-card-wrapper:not(.coming-soon):hover .game-card {
   border-color: var(--color-fg);
-  box-shadow: 4px 4px 0 rgba(0, 0, 0, 0.9);
+  box-shadow: none;
 }
 
 .game-card-gradient {
@@ -129,9 +129,9 @@
   justify-content: space-between;
   align-items: center;
   padding: 0.5rem 0.75rem;
-  background: var(--color-panel-strong);
-  border-radius: 0.35rem;
-  border: 1px solid var(--color-border);
+  background: var(--color-bg);
+  border-radius: 0;
+  border: 1px solid var(--color-fg);
 }
 
 .detail-label {
@@ -149,7 +149,7 @@
 .game-card-footer {
   margin-top: 1rem;
   padding-top: 1rem;
-  border-top: 1px solid var(--color-border);
+  border-top: 1px solid var(--color-fg);
 }
 
 .play-button {
@@ -160,7 +160,7 @@
   font-weight: 600;
   font-size: 0.75rem;
   text-align: center;
-  border-radius: 0.35rem;
+  border-radius: 0;
   border: 1px solid var(--color-fg);
   text-transform: uppercase;
   letter-spacing: 0.2em;
@@ -178,25 +178,25 @@
 }
 
 .game-card-wrapper.coming-soon .game-card {
-  background: rgb(var(--color-panel-rgb) / 0.5);
-  border: 1px dashed var(--color-border);
+  background: rgb(var(--color-bg-rgb) / 0.6);
+  border: 1px dashed var(--color-fg);
   opacity: 0.7;
 }
 
 .game-card-wrapper.coming-soon:hover .game-card {
-  border-color: var(--color-border);
+  border-color: var(--color-fg);
   transform: none;
-  box-shadow: 2px 2px 0 rgba(0, 0, 0, 0.9);
+  box-shadow: none;
 }
 
 .coming-soon-tag {
   display: inline-block;
   padding: 0.35rem 0.6rem;
-  background: var(--color-panel-strong);
+  background: var(--color-bg);
   color: var(--color-dim);
   font-size: 0.7rem;
   font-weight: 600;
-  border-radius: 0.25rem;
+  border-radius: 0;
   margin-top: 1rem;
   text-transform: uppercase;
   letter-spacing: 0.08em;
