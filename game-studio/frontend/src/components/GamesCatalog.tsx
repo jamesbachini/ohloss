@@ -61,12 +61,12 @@ export function GamesCatalog() {
           {error ? (
             <>
               <h3 className="gradient-text">Wallet Connection Error</h3>
-              <p style={{ color: '#4b5563', marginTop: '0.75rem' }}>{error}</p>
+              <p style={{ color: 'var(--color-dim)', marginTop: '0.75rem' }}>{error}</p>
             </>
           ) : (
             <>
               <h3 className="gradient-text">{isConnecting ? 'Connecting…' : 'Connect Wallet'}</h3>
-              <p style={{ color: '#4b5563', marginTop: '0.75rem' }}>
+              <p style={{ color: 'var(--color-dim)', marginTop: '0.75rem' }}>
                 Connect a dev wallet from the header to play games.
               </p>
             </>

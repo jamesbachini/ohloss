@@ -6,12 +6,11 @@
 
 /* Header */
 .layout-header {
-  background: rgba(255, 255, 255, 0.6);
-  backdrop-filter: blur(40px);
-  border-radius: 1.5rem;
+  background: rgb(var(--color-panel-rgb) / 0.95);
+  border-radius: 0.75rem;
   margin: 0.75rem 1.5rem 1rem;
-  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -4px rgba(0, 0, 0, 0.1);
-  border: 1px solid rgba(255, 255, 255, 0.6);
+  box-shadow: 2px 2px 0 rgba(0, 0, 0, 0.9);
+  border: 1px solid var(--color-border);
   padding: 1rem 2rem;
 }
 
@@ -47,9 +46,10 @@
 .header-nav {
   display: flex;
   gap: 0.5rem;
-  background: rgba(243, 244, 246, 0.5);
+  background: rgb(var(--color-panel-rgb) / 0.6);
   padding: 0.5rem;
-  border-radius: 0.75rem;
+  border-radius: 0.5rem;
+  border: 1px solid var(--color-border);
 }
 
 .header-nav-item {
@@ -58,42 +58,46 @@
   gap: 0.5rem;
   padding: 0.625rem 1.25rem;
   background: transparent;
-  border: none;
-  border-radius: 0.5rem;
+  border: 1px solid transparent;
+  border-radius: 0.35rem;
   font-weight: 600;
   font-size: 0.875rem;
-  color: #6b7280;
+  color: var(--color-dim);
   cursor: pointer;
   transition: all 0.2s ease;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
 }
 
 .header-nav-item:hover {
-  background: rgba(255, 255, 255, 0.8);
-  color: #374151;
+  background: rgb(var(--color-panel-rgb) / 0.8);
+  color: var(--color-fg);
+  border-color: var(--color-border);
 }
 
 .header-nav-item.active {
-  background: white;
-  color: #3b82f6;
-  box-shadow: 0 2px 4px -1px rgba(0, 0, 0, 0.1);
+  background: var(--color-fg);
+  color: var(--color-bg);
+  box-shadow: 2px 2px 0 rgba(0, 0, 0, 0.9);
 }
 
 .header-title {
   font-size: 2rem;
-  font-weight: 900;
+  font-weight: 700;
   margin: 0;
   margin-bottom: 0.25rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
 }
 
 .header-subtitle {
   width: 100%;
-  color: rgba(55, 65, 81, 0.75);
+  color: var(--color-dim);
   font-size: 0.75rem;
-  font-weight: 650;
+  font-weight: 500;
   letter-spacing: 0.28em;
   text-transform: uppercase;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New",
-    monospace;
+  font-family: var(--font-mono);
   margin: 0;
 }
 

@@ -10,7 +10,7 @@ function App() {
       {!hasAnyContracts ? (
         <div className="card">
           <h3 className="gradient-text">Setup Required</h3>
-          <p style={{ color: '#4b5563', marginTop: '1rem' }}>
+          <p style={{ color: 'var(--color-dim)', marginTop: '1rem' }}>
             Contract IDs not configured. Please run <code>bun run setup</code> from the repo root
             to deploy contracts and configure the frontend.
           </p>
