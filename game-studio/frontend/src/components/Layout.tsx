@@ -26,7 +26,14 @@ export function Layout({ children }: LayoutProps) {
           <div className="header-left">
             <div className="header-brand">
               <h1 className="header-title">
-                <span className="gradient-text">OHLOSS Game Studio</span>
+                <span className="sr-only">OHLOSS Game Studio</span>
+                <span className="header-ascii gradient-text" aria-hidden="true">{`  ██████╗ ██╗  ██╗██╗      ██████╗ ███████╗███████╗
+ ██╔═══██╗██║  ██║██║     ██╔═══██╗██╔════╝██╔════╝
+ ██║   ██║███████║██║     ██║   ██║███████╗███████╗
+ ██║   ██║██╔══██║██║     ██║   ██║╚════██║╚════██║
+ ╚██████╔╝██║  ██║███████╗╚██████╔╝███████║███████║
+  ╚═════╝ ╚═╝  ╚═╝╚══════╝ ╚═════╝ ╚══════╝╚══════╝`}</span>
+                <span className="header-title-text">GAME STUDIO</span>
               </h1>
               <p className="header-subtitle">Build Zero-Loss Games On Stellar</p>
             </div>

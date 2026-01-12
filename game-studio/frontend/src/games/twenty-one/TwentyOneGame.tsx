@@ -3,6 +3,21 @@ import { twentyOneService } from './twentyOneService';
 import { requestCache, createCacheKey } from '@/utils/requestCache';
 import { useWallet } from '@/hooks/useWallet';
 import { getFundedSimulationSourceAddress } from '@/utils/simulationUtils';
+import { devWalletService, DevWalletService } from '@/services/devWalletService';
+
+const createRandomSessionId = (): number => {
+  if (typeof crypto !== 'undefined' && crypto.getRandomValues) {
+    let value = 0;
+    const buffer = new Uint32Array(1);
+    while (value === 0) {
+      crypto.getRandomValues(buffer);
+      value = buffer[0];
+    }
+    return value;
+  }
+
+  return (Math.floor(Math.random() * 0xffffffff) >>> 0) || 1;
+};
 
 interface TwentyOneGameProps {
   userAddress: string;
@@ -90,14 +105,15 @@ export function TwentyOneGame({
   onGameComplete
 }: TwentyOneGameProps) {
   const DEFAULT_WAGER = '0.1';
-  const { getContractSigner } = useWallet();
+  const { getContractSigner, walletType } = useWallet();
   const normalizedUserAddress = userAddress.trim().toUpperCase();
   const normalizeAddress = (address: string) => address.trim().toUpperCase();
-  const [sessionId, setSessionId] = useState<number>(() => Math.floor(Date.now() / 1000) % 1000000000);
+  const [sessionId, setSessionId] = useState<number>(() => createRandomSessionId());
   const [player1Address, setPlayer1Address] = useState(userAddress);
   const [player1Wager, setPlayer1Wager] = useState(DEFAULT_WAGER);
   const [gameState, setGameState] = useState<GameState | null>(null);
   const [loading, setLoading] = useState(false);
+  const [quickstartLoading, setQuickstartLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [gamePhase, setGamePhase] = useState<'create' | 'play' | 'reveal' | 'complete'>('create');
@@ -128,6 +144,11 @@ export function TwentyOneGame({
   }, [createMode, importPlayer2Wager]);
 
   const FP_DECIMALS = 7;
+  const isBusy = loading || quickstartLoading;
+  const quickstartAvailable = walletType === 'dev'
+    && DevWalletService.isDevModeAvailable()
+    && DevWalletService.isPlayerAvailable(1)
+    && DevWalletService.isPlayerAvailable(2);
 
   const parseWager = (value: string): bigint | null => {
     try {
@@ -358,6 +379,110 @@ export function TwentyOneGame({
       setError(err instanceof Error ? err.message : 'Failed to prepare transaction');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleQuickStart = async () => {
+    try {
+      setQuickstartLoading(true);
+      setError(null);
+      setSuccess(null);
+
+      if (walletType !== 'dev') {
+        throw new Error('Quickstart only works with dev wallets in the Games Library.');
+      }
+
+      if (!DevWalletService.isDevModeAvailable() || !DevWalletService.isPlayerAvailable(1) || !DevWalletService.isPlayerAvailable(2)) {
+        throw new Error('Quickstart requires both dev wallets. Run "bun run setup" and connect a dev wallet.');
+      }
+
+      const p1Wager = parseWager(player1Wager);
+      if (!p1Wager || p1Wager <= 0n) {
+        throw new Error('Enter a valid wager amount');
+      }
+
+      const originalPlayer = devWalletService.getCurrentPlayer();
+      let player1AddressQuickstart = '';
+      let player2AddressQuickstart = '';
+      let player1Signer: ReturnType<typeof devWalletService.getSigner> | null = null;
+      let player2Signer: ReturnType<typeof devWalletService.getSigner> | null = null;
+
+      try {
+        await devWalletService.initPlayer(1);
+        player1AddressQuickstart = devWalletService.getPublicKey();
+        player1Signer = devWalletService.getSigner();
+
+        await devWalletService.initPlayer(2);
+        player2AddressQuickstart = devWalletService.getPublicKey();
+        player2Signer = devWalletService.getSigner();
+      } finally {
+        if (originalPlayer) {
+          await devWalletService.initPlayer(originalPlayer);
+        }
+      }
+
+      if (!player1Signer || !player2Signer) {
+        throw new Error('Quickstart failed to initialize dev wallet signers.');
+      }
+
+      if (player1AddressQuickstart === player2AddressQuickstart) {
+        throw new Error('Quickstart requires two different dev wallets.');
+      }
+
+      const quickstartSessionId = createRandomSessionId();
+      setSessionId(quickstartSessionId);
+      setPlayer1Address(player1AddressQuickstart);
+      setCreateMode('create');
+      setExportedAuthEntryXDR(null);
+      setImportAuthEntryXDR('');
+      setImportSessionId('');
+      setImportPlayer1('');
+      setImportPlayer1Wager('');
+      setImportPlayer2Wager(DEFAULT_WAGER);
+      setLoadSessionId('');
+
+      const placeholderPlayer2Address = await getFundedSimulationSourceAddress([
+        player1AddressQuickstart,
+        player2AddressQuickstart,
+      ]);
+
+      const authEntryXDR = await twentyOneService.prepareStartGame(
+        quickstartSessionId,
+        player1AddressQuickstart,
+        placeholderPlayer2Address,
+        p1Wager,
+        p1Wager,
+        player1Signer
+      );
+
+      const fullySignedTxXDR = await twentyOneService.importAndSignAuthEntry(
+        authEntryXDR,
+        player2AddressQuickstart,
+        p1Wager,
+        player2Signer
+      );
+
+      await twentyOneService.finalizeStartGame(
+        fullySignedTxXDR,
+        player2AddressQuickstart,
+        player2Signer
+      );
+
+      try {
+        const game = await twentyOneService.getGame(quickstartSessionId);
+        setGameState(game);
+      } catch (err) {
+        console.log('Quickstart game not available yet:', err);
+      }
+      setGamePhase('play');
+      onStandingsRefresh();
+      setSuccess('Quickstart complete! Both players signed and the game is ready.');
+      setTimeout(() => setSuccess(null), 2000);
+    } catch (err) {
+      console.error('Quickstart error:', err);
+      setError(err instanceof Error ? err.message : 'Quickstart failed');
+    } finally {
+      setQuickstartLoading(false);
     }
   };
 
@@ -688,6 +813,24 @@ export function TwentyOneGame({
               </button>
             </div>
 
+            <div className="p-4 mb-6 bg-gradient-to-r from-yellow-50 to-orange-50 border-2 border-yellow-200 rounded-xl">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                <div>
+                  <p className="text-sm font-bold text-yellow-900">⚡ Quickstart (Dev)</p>
+                  <p className="text-xs font-semibold text-yellow-800">
+                    Creates and signs for both dev wallets in one click. Works only in the Games Library.
+                  </p>
+                </div>
+                <button
+                  onClick={handleQuickStart}
+                  disabled={isBusy || !quickstartAvailable}
+                  className="px-4 py-3 rounded-xl font-bold text-sm text-white bg-gradient-to-r from-yellow-500 to-orange-500 hover:from-yellow-600 hover:to-orange-600 disabled:from-gray-200 disabled:to-gray-300 disabled:text-gray-500 transition-all shadow-md hover:shadow-lg transform hover:scale-105 disabled:transform-none"
+                >
+                  {quickstartLoading ? 'Quickstarting...' : '⚡ Quickstart Game'}
+                </button>
+              </div>
+            </div>
+
             {createMode === 'create' ? (
               <div className="space-y-6">
                 <div className="space-y-4">
@@ -727,7 +870,7 @@ export function TwentyOneGame({
                 {!exportedAuthEntryXDR ? (
                   <button
                     onClick={handlePrepareTransaction}
-                    disabled={loading}
+                    disabled={isBusy}
                     className="w-full py-4 rounded-xl font-bold text-white text-lg bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 disabled:from-gray-200 disabled:to-gray-300 disabled:text-gray-500 transition-all shadow-lg hover:shadow-xl transform hover:scale-105 disabled:transform-none"
                   >
                     {loading ? 'Preparing...' : '🎴 Prepare & Export Auth Entry'}
@@ -802,7 +945,7 @@ export function TwentyOneGame({
                 </div>
                 <button
                   onClick={handleImportTransaction}
-                  disabled={loading || !importAuthEntryXDR.trim() || !importPlayer2Wager.trim()}
+                  disabled={isBusy || !importAuthEntryXDR.trim() || !importPlayer2Wager.trim()}
                   className="w-full py-4 rounded-xl font-bold text-white text-lg bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-700 hover:to-cyan-700 disabled:from-gray-300 disabled:to-gray-400 transition-all shadow-xl"
                 >
                   {loading ? 'Importing & Signing...' : 'Import & Sign Auth Entry'}
@@ -825,7 +968,7 @@ export function TwentyOneGame({
                 </div>
                 <button
                   onClick={handleLoadExistingGame}
-                  disabled={loading || !loadSessionId.trim()}
+                  disabled={isBusy || !loadSessionId.trim()}
                   className="w-full py-4 rounded-xl font-bold text-white text-lg bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 disabled:from-gray-300 disabled:to-gray-400 transition-all shadow-xl"
                 >
                   {loading ? 'Loading...' : '🎮 Load Game'}
@@ -917,14 +1060,14 @@ export function TwentyOneGame({
                 <div className="grid grid-cols-2 gap-4">
                   <button
                     onClick={handleHit}
-                    disabled={loading}
+                    disabled={isBusy}
                     className="py-4 rounded-xl font-black text-2xl text-white bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 disabled:from-gray-400 disabled:to-gray-500 transition-all shadow-xl hover:shadow-2xl transform hover:scale-105 disabled:transform-none"
                   >
                     🎴 HIT
                   </button>
                   <button
                     onClick={handleStick}
-                    disabled={loading}
+                    disabled={isBusy}
                     className="py-4 rounded-xl font-black text-2xl text-white bg-gradient-to-r from-red-600 to-red-700 hover:from-red-700 hover:to-red-800 disabled:from-gray-400 disabled:to-gray-500 transition-all shadow-xl hover:shadow-2xl transform hover:scale-105 disabled:transform-none"
                   >
                     ✋ STICK
@@ -957,7 +1100,7 @@ export function TwentyOneGame({
             </p>
             <button
               onClick={handleRevealWinner}
-              disabled={loading}
+              disabled={isBusy}
               className="px-12 py-5 rounded-xl font-black text-white text-2xl bg-gradient-to-r from-yellow-500 to-orange-500 hover:from-yellow-600 hover:to-orange-600 disabled:from-gray-300 disabled:to-gray-400 transition-all shadow-2xl hover:shadow-3xl transform hover:scale-105 disabled:transform-none"
             >
               {loading ? 'Revealing...' : '🏆 Reveal Winner'}

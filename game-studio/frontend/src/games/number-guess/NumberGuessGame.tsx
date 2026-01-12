@@ -4,7 +4,22 @@ import { requestCache, createCacheKey } from '@/utils/requestCache';
 import { useWallet } from '@/hooks/useWallet';
 import { NUMBER_GUESS_CONTRACT } from '@/utils/constants';
 import { getFundedSimulationSourceAddress } from '@/utils/simulationUtils';
+import { devWalletService, DevWalletService } from '@/services/devWalletService';
 import type { Game } from './bindings';
+
+const createRandomSessionId = (): number => {
+  if (typeof crypto !== 'undefined' && crypto.getRandomValues) {
+    let value = 0;
+    const buffer = new Uint32Array(1);
+    while (value === 0) {
+      crypto.getRandomValues(buffer);
+      value = buffer[0];
+    }
+    return value;
+  }
+
+  return (Math.floor(Math.random() * 0xffffffff) >>> 0) || 1;
+};
 
 // Create service instance with the contract ID
 const numberGuessService = new NumberGuessService(NUMBER_GUESS_CONTRACT);
@@ -30,15 +45,15 @@ export function NumberGuessGame({
   onGameComplete
 }: NumberGuessGameProps) {
   const DEFAULT_WAGER = '0.1';
-  const { getContractSigner } = useWallet();
-  // Use a session ID that fits in u32 (max 4,294,967,295)
-  // Take the last 9 digits of the timestamp to ensure uniqueness while fitting in u32
-  const [sessionId, setSessionId] = useState<number>(() => Math.floor(Date.now() / 1000) % 1000000000);
+  const { getContractSigner, walletType } = useWallet();
+  // Use a random session ID that fits in u32 (avoid 0 because UI validation treats <=0 as invalid)
+  const [sessionId, setSessionId] = useState<number>(() => createRandomSessionId());
   const [player1Address, setPlayer1Address] = useState(userAddress);
   const [player1Wager, setPlayer1Wager] = useState(DEFAULT_WAGER);
   const [guess, setGuess] = useState<number | null>(null);
   const [gameState, setGameState] = useState<Game | null>(null);
   const [loading, setLoading] = useState(false);
+  const [quickstartLoading, setQuickstartLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [gamePhase, setGamePhase] = useState<'create' | 'guess' | 'reveal' | 'complete'>('create');
@@ -67,6 +82,11 @@ export function NumberGuessGame({
   }, [createMode, importPlayer2Wager]);
 
   const FP_DECIMALS = 7;
+  const isBusy = loading || quickstartLoading;
+  const quickstartAvailable = walletType === 'dev'
+    && DevWalletService.isDevModeAvailable()
+    && DevWalletService.isPlayerAvailable(1)
+    && DevWalletService.isPlayerAvailable(2);
 
   const parseWager = (value: string): bigint | null => {
     try {
@@ -405,6 +425,110 @@ export function NumberGuessGame({
       // Keep the component in 'create' phase so user can see the error and retry
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleQuickStart = async () => {
+    try {
+      setQuickstartLoading(true);
+      setError(null);
+      setSuccess(null);
+
+      if (walletType !== 'dev') {
+        throw new Error('Quickstart only works with dev wallets in the Games Library.');
+      }
+
+      if (!DevWalletService.isDevModeAvailable() || !DevWalletService.isPlayerAvailable(1) || !DevWalletService.isPlayerAvailable(2)) {
+        throw new Error('Quickstart requires both dev wallets. Run "bun run setup" and connect a dev wallet.');
+      }
+
+      const p1Wager = parseWager(player1Wager);
+      if (!p1Wager || p1Wager <= 0n) {
+        throw new Error('Enter a valid wager amount');
+      }
+
+      const originalPlayer = devWalletService.getCurrentPlayer();
+      let player1AddressQuickstart = '';
+      let player2AddressQuickstart = '';
+      let player1Signer: ReturnType<typeof devWalletService.getSigner> | null = null;
+      let player2Signer: ReturnType<typeof devWalletService.getSigner> | null = null;
+
+      try {
+        await devWalletService.initPlayer(1);
+        player1AddressQuickstart = devWalletService.getPublicKey();
+        player1Signer = devWalletService.getSigner();
+
+        await devWalletService.initPlayer(2);
+        player2AddressQuickstart = devWalletService.getPublicKey();
+        player2Signer = devWalletService.getSigner();
+      } finally {
+        if (originalPlayer) {
+          await devWalletService.initPlayer(originalPlayer);
+        }
+      }
+
+      if (!player1Signer || !player2Signer) {
+        throw new Error('Quickstart failed to initialize dev wallet signers.');
+      }
+
+      if (player1AddressQuickstart === player2AddressQuickstart) {
+        throw new Error('Quickstart requires two different dev wallets.');
+      }
+
+      const quickstartSessionId = createRandomSessionId();
+      setSessionId(quickstartSessionId);
+      setPlayer1Address(player1AddressQuickstart);
+      setCreateMode('create');
+      setExportedAuthEntryXDR(null);
+      setImportAuthEntryXDR('');
+      setImportSessionId('');
+      setImportPlayer1('');
+      setImportPlayer1Wager('');
+      setImportPlayer2Wager(DEFAULT_WAGER);
+      setLoadSessionId('');
+
+      const placeholderPlayer2Address = await getFundedSimulationSourceAddress([
+        player1AddressQuickstart,
+        player2AddressQuickstart,
+      ]);
+
+      const authEntryXDR = await numberGuessService.prepareStartGame(
+        quickstartSessionId,
+        player1AddressQuickstart,
+        placeholderPlayer2Address,
+        p1Wager,
+        p1Wager,
+        player1Signer
+      );
+
+      const fullySignedTxXDR = await numberGuessService.importAndSignAuthEntry(
+        authEntryXDR,
+        player2AddressQuickstart,
+        p1Wager,
+        player2Signer
+      );
+
+      await numberGuessService.finalizeStartGame(
+        fullySignedTxXDR,
+        player2AddressQuickstart,
+        player2Signer
+      );
+
+      try {
+        const game = await numberGuessService.getGame(quickstartSessionId);
+        setGameState(game);
+      } catch (err) {
+        console.log('Quickstart game not available yet:', err);
+      }
+      setGamePhase('guess');
+      onStandingsRefresh();
+      setSuccess('Quickstart complete! Both players signed and the game is ready.');
+      setTimeout(() => setSuccess(null), 2000);
+    } catch (err) {
+      console.error('Quickstart error:', err);
+      setError(err instanceof Error ? err.message : 'Quickstart failed');
+    } finally {
+      setQuickstartLoading(false);
     }
   };
 
@@ -797,6 +921,24 @@ export function NumberGuessGame({
             </button>
           </div>
 
+          <div className="p-4 bg-gradient-to-r from-yellow-50 to-orange-50 border-2 border-yellow-200 rounded-xl">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+              <div>
+                <p className="text-sm font-bold text-yellow-900">⚡ Quickstart (Dev)</p>
+                <p className="text-xs font-semibold text-yellow-800">
+                  Creates and signs for both dev wallets in one click. Works only in the Games Library.
+                </p>
+              </div>
+              <button
+                onClick={handleQuickStart}
+                disabled={isBusy || !quickstartAvailable}
+                className="px-4 py-3 rounded-xl font-bold text-sm text-white bg-gradient-to-r from-yellow-500 to-orange-500 hover:from-yellow-600 hover:to-orange-600 disabled:from-gray-200 disabled:to-gray-300 disabled:text-gray-500 transition-all shadow-md hover:shadow-lg transform hover:scale-105 disabled:transform-none"
+              >
+                {quickstartLoading ? 'Quickstarting...' : '⚡ Quickstart Game'}
+              </button>
+            </div>
+          </div>
+
           {createMode === 'create' ? (
             <div className="space-y-6">
           <div className="space-y-4">
@@ -847,7 +989,7 @@ export function NumberGuessGame({
             {!exportedAuthEntryXDR ? (
               <button
                 onClick={handlePrepareTransaction}
-                disabled={loading}
+                disabled={isBusy}
                 className="w-full py-4 rounded-xl font-bold text-white text-sm bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 disabled:from-gray-200 disabled:to-gray-300 disabled:text-gray-500 transition-all shadow-lg hover:shadow-xl transform hover:scale-105 disabled:transform-none"
               >
                 {loading ? 'Preparing...' : 'Prepare & Export Auth Entry'}
@@ -988,7 +1130,7 @@ export function NumberGuessGame({
 
               <button
                 onClick={handleImportTransaction}
-                disabled={loading || !importAuthEntryXDR.trim() || !importPlayer2Wager.trim()}
+                disabled={isBusy || !importAuthEntryXDR.trim() || !importPlayer2Wager.trim()}
                 className="w-full py-4 rounded-xl font-bold text-white text-lg bg-gradient-to-r from-blue-500 via-cyan-500 to-teal-500 hover:from-blue-600 hover:via-cyan-600 hover:to-teal-600 disabled:from-gray-200 disabled:to-gray-300 disabled:text-gray-500 transition-all shadow-xl hover:shadow-2xl transform hover:scale-105 disabled:transform-none"
               >
                 {loading ? 'Importing & Signing...' : 'Import & Sign Auth Entry'}
@@ -1027,7 +1169,7 @@ export function NumberGuessGame({
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <button
                   onClick={handleLoadExistingGame}
-                  disabled={loading || !loadSessionId.trim()}
+                  disabled={isBusy || !loadSessionId.trim()}
                   className="py-4 rounded-xl font-bold text-white text-lg bg-gradient-to-r from-green-500 via-emerald-500 to-teal-500 hover:from-green-600 hover:via-emerald-600 hover:to-teal-600 disabled:from-gray-200 disabled:to-gray-300 disabled:text-gray-500 transition-all shadow-xl hover:shadow-2xl transform hover:scale-105 disabled:transform-none"
                 >
                   {loading ? 'Loading...' : '🎮 Load Game'}
@@ -1117,7 +1259,7 @@ export function NumberGuessGame({
               </div>
               <button
                 onClick={handleMakeGuess}
-                disabled={loading || guess === null}
+                disabled={isBusy || guess === null}
                 className="w-full py-4 rounded-xl font-bold text-white text-lg bg-gradient-to-r from-purple-500 via-pink-500 to-red-500 hover:from-purple-600 hover:via-pink-600 hover:to-red-600 disabled:from-gray-200 disabled:to-gray-300 disabled:text-gray-500 transition-all shadow-xl hover:shadow-2xl transform hover:scale-105 disabled:transform-none"
               >
                 {loading ? 'Submitting...' : 'Submit Guess'}
@@ -1148,7 +1290,7 @@ export function NumberGuessGame({
             </p>
             <button
               onClick={handleRevealWinner}
-              disabled={loading}
+              disabled={isBusy}
               className="px-10 py-4 rounded-xl font-bold text-white text-lg bg-gradient-to-r from-yellow-500 via-orange-500 to-amber-500 hover:from-yellow-600 hover:via-orange-600 hover:to-amber-600 disabled:from-gray-200 disabled:to-gray-300 disabled:text-gray-500 transition-all shadow-xl hover:shadow-2xl transform hover:scale-105 disabled:transform-none"
             >
               {loading ? 'Revealing...' : 'Reveal Winner'}
