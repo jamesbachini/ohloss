@@ -63,12 +63,10 @@ export function Resources() {
           <nav className="sidebar-nav">
             <button
               className="nav-item external"
-              onClick={() => handleExternalLink('https://github.com/kalepail/blendizzard')}
+              onClick={() => handleExternalLink('https://ohloss.com')}
             >
-              <span className="nav-icon" aria-hidden="true">
-                <Github size={18} />
-              </span>
-              <span className="nav-label">Blendizzard</span>
+              <span className="nav-icon" aria-hidden="true">🌐</span>
+              <span className="nav-label">OHLOSS.com</span>
               <span className="external-icon" aria-hidden="true">
                 <ExternalLink size={16} />
               </span>
@@ -76,7 +74,20 @@ export function Resources() {
 
             <button
               className="nav-item external"
-              onClick={() => handleExternalLink('https://github.com/jamesbachini/Blendizzard-Game-Studio')}
+              onClick={() => handleExternalLink('https://github.com/kalepail/ohloss')}
+            >
+              <span className="nav-icon" aria-hidden="true">
+                <Github size={18} />
+              </span>
+              <span className="nav-label">OHLOSS</span>
+              <span className="external-icon" aria-hidden="true">
+                <ExternalLink size={16} />
+              </span>
+            </button>
+
+            <button
+              className="nav-item external"
+              onClick={() => handleExternalLink('https://github.com/jamesbachini/ohloss-game-studio')}
             >
               <span className="nav-icon" aria-hidden="true">
                 <Github size={18} />
@@ -110,7 +121,7 @@ function QuickstartSection() {
     <div className="doc-section">
       <h1 className="doc-title">Quickstart Guide</h1>
       <p className="doc-subtitle">
-        Get up and running with Blendizzard Game Studio in minutes
+        Get up and running with OHLOSS Game Studio in minutes
       </p>
 
       <div className="doc-content">
@@ -178,15 +189,15 @@ function CreateGameSection() {
     <div className="doc-section">
       <h1 className="doc-title">Create a New Game</h1>
       <p className="doc-subtitle">
-        Build and integrate custom Soroban games with Blendizzard
+        Build and integrate custom Soroban games with OHLOSS
       </p>
 
       <div className="doc-content">
         <section className="content-block">
           <h2>Overview</h2>
           <p>
-            Creating a new game in Blendizzard Game Studio involves building a Soroban smart contract
-            and frontend that integrates with the Blendizzard ecosystem.
+            Creating a new game in OHLOSS Game Studio involves building a Soroban smart contract
+            and frontend that integrates with the OHLOSS ecosystem.
           </p>
         </section>
 
@@ -239,7 +250,7 @@ soroban-sdk = { workspace = true }`}</code>
               <code>{`[workspace]
 resolver = "2"
 members = [
-  "contracts/mock-blendizzard",
+  "contracts/mock-ohloss",
   "contracts/twenty-one",
   "contracts/number-guess",
   "contracts/my-game",  # Add this line
@@ -250,13 +261,13 @@ members = [
 
         <section className="content-block">
           <h2>Step 4: Implement Required Functions</h2>
-          <p>Your game contract must start_game and end_game in the blendizzard (mock) contract</p>
+          <p>Your game contract must start_game and end_game in the OHLOSS (mock) contract</p>
 
           <h3>Interface</h3>
           <div className="code-block">
             <pre>
-              <code>{`#[contractclient(name = "BlendizzardClient")]
-pub trait Blendizzard {
+              <code>{`#[contractclient(name = "OhlossClient")]
+pub trait Ohloss {
     fn start_game(
         env: Env,
         game_id: Address,
@@ -321,14 +332,14 @@ function ImportGameSection() {
     <div className="doc-section">
       <h1 className="doc-title">Import a Game</h1>
       <p className="doc-subtitle">
-        Integrate existing Blendizzard games into your Game Studio instance
+        Integrate existing OHLOSS games into your Game Studio instance
       </p>
 
       <div className="doc-content">
         <section className="content-block">
           <h2>Overview</h2>
           <p>
-            Importing a game allows you to integrate existing Blendizzard-compatible games into your
+            Importing a game allows you to integrate existing OHLOSS-compatible games into your
             Game Studio instance. This guide shows you exactly which files to modify and what code to add.
           </p>
 
@@ -336,7 +347,7 @@ function ImportGameSection() {
             <div className="info-icon">💡</div>
             <div>
               <strong>Quick Reference: Number Guess Example</strong>
-              <p>The number-guess game in this repo was imported from Blendizzard following this exact pattern. You can refer to it as a working example:</p>
+              <p>The number-guess game in this repo was imported from OHLOSS following this exact pattern. You can refer to it as a working example:</p>
               <ul>
                 <li><code>contracts/number-guess/</code> - Contract files</li>
                 <li><code>frontend/src/games/number-guess/</code> - Frontend component and service</li>
@@ -363,7 +374,7 @@ function ImportGameSection() {
           <ul>
             <li>The game's contract source code (Rust + Soroban)</li>
             <li>The game's frontend component (React + TypeScript)</li>
-            <li>Confirmation that the game implements Blendizzard integration</li>
+            <li>Confirmation that the game implements OHLOSS integration</li>
           </ul>
         </section>
 
@@ -390,7 +401,7 @@ ls contracts/imported-game
               <code>{`[workspace]
 resolver = "2"
 members = [
-  "contracts/mock-blendizzard",
+  "contracts/mock-ohloss",
   "contracts/twenty-one",
   "contracts/number-guess",
   "contracts/imported-game",  # Add this
@@ -404,7 +415,7 @@ members = [
           <p>Once the contract is listed in the workspace members, the scripts automatically:</p>
           <ul>
             <li>Build all contracts</li>
-            <li>Deploy all contracts (deploying <code>mock-blendizzard</code> first)</li>
+            <li>Deploy all contracts (deploying <code>mock-ohloss</code> first)</li>
             <li>Generate TypeScript bindings for every deployed contract</li>
             <li>Write per-contract IDs into the root <code>.env</code> using the crate name</li>
           </ul>
@@ -456,7 +467,7 @@ ls frontend/src/games/imported-game/
             <div className="info-icon">💡</div>
             <div>
               <strong>Service Pattern for Easy Import/Export</strong>
-              <p>When copying from Blendizzard, the game service should accept a <code>contractId</code> parameter:</p>
+              <p>When copying from OHLOSS, the game service should accept a <code>contractId</code> parameter:</p>
             </div>
           </div>
 
@@ -499,7 +510,7 @@ export function ImportedGame({ userAddress, onBack, ... }) {
             </pre>
           </div>
 
-          <p>This pattern makes it easy to move games between Blendizzard and Game Studio by just changing the import path and passing the contract ID.</p>
+          <p>This pattern makes it easy to move games between OHLOSS and Game Studio by just changing the import path and passing the contract ID.</p>
         </section>
 
         <section className="content-block">
@@ -606,7 +617,7 @@ function ExportGameSection() {
     <div className="doc-section">
       <h1 className="doc-title">Publish a Game</h1>
       <p className="doc-subtitle">
-        Package and share your game with the Blendizzard community
+        Package and share your game with the OHLOSS community
       </p>
 
       <div className="doc-content">
@@ -615,7 +626,7 @@ function ExportGameSection() {
           <p>
             Exporting a game creates a standalone, portable package that other developers can import
             into their Game Studio instances. This enables community collaboration and game sharing
-            across the Blendizzard ecosystem.
+            across the OHLOSS ecosystem.
           </p>
         </section>
 
@@ -626,7 +637,7 @@ function ExportGameSection() {
             <li>All contract functions work correctly</li>
             <li>Tests pass with <code>cargo test</code></li>
             <li>Frontend component is fully functional</li>
-            <li>Blendizzard integration is properly implemented</li>
+            <li>OHLOSS integration is properly implemented</li>
             <li>Code is well-documented</li>
           </ul>
         </section>
@@ -659,29 +670,29 @@ function ExportGameSection() {
           <h2>Step 3: Publish Your New Game</h2>
           <p>Share your game with the community:</p>
 
-          <h3>Submit a Pull Request to Blendizzard</h3>
+          <h3>Submit a Pull Request to OHLOSS</h3>
           <p>
-            The preferred way to publish a game is to contribute it directly to the main Blendizzard repository via a pull request.
+            The preferred way to publish a game is to contribute it directly to the main OHLOSS repository via a pull request.
             Start by forking the repo at{' '}
-            <a href="https://github.com/kalepail/blendizzard" target="_blank" rel="noopener noreferrer">
-              https://github.com/kalepail/blendizzard
+            <a href="https://github.com/kalepail/ohloss" target="_blank" rel="noopener noreferrer">
+              https://github.com/kalepail/ohloss
             </a>
             , then add your game files and open a PR.
           </p>
           <div className="code-block">
             <pre>
-              <code>{`# 1) Fork the Blendizzard repo on GitHub:
-#    https://github.com/kalepail/blendizzard
+              <code>{`# 1) Fork the OHLOSS repo on GitHub:
+#    https://github.com/kalepail/ohloss
 
 # 2) Clone your fork
-git clone https://github.com/<your-username>/blendizzard.git
-cd blendizzard
+git clone https://github.com/<your-username>/ohloss.git
+cd ohloss
 
 # 3) Create a feature branch
 git checkout -b add-<your-game-name>
 
 # 4) Add your game files (contract + frontend + docs) following existing patterns in the repo
-#    Example (adjust paths to match the Blendizzard repo structure):
+#    Example (adjust paths to match the OHLOSS repo structure):
 #    cp -r /path/to/your-game/contracts/<your-game> contracts/
 #    cp -r /path/to/your-game/frontend/src/games/<your-game> frontend/src/games/
 
@@ -690,7 +701,7 @@ git add .
 git commit -m "Add <your-game-name> game"
 git push -u origin add-<your-game-name>
 
-# 6) Open a Pull Request from your fork/branch to kalepail/blendizzard:main`}</code>
+# 6) Open a Pull Request from your fork/branch to kalepail/ohloss:main`}</code>
             </pre>
           </div>
           <div className="info-box">
@@ -713,7 +724,7 @@ git push -u origin add-<your-game-name>
 git init
 git add .
 git commit -m "Initial release v1.0.0"
-git remote add origin https://github.com/yourusername/blendizzard.git
+git remote add origin https://github.com/yourusername/ohloss.git
 git push -u origin main
 
 # Create a release with your .tar.gz and .zip files`}</code>
@@ -757,7 +768,7 @@ git push -u origin main
           <h2>Review and Mainnet Availability</h2>
           <p>
             Games are included at the discretion of the community, and review/assessment may take some time.
-            For mainnet availability, all games must be whitelisted on the mainnet Blendizzard contract before they can be used.
+            For mainnet availability, all games must be whitelisted on the mainnet OHLOSS contract before they can be used.
           </p>
         </section>
       </div>

@@ -85,7 +85,7 @@ h1, h2, h3 {
   margin-bottom: 1rem;
 }
 
-/* Button variants - matching Blendizzard style */
+/* Button variants - matching Ohloss style */
 button {
   padding: 0.75rem 1.5rem;
   border-radius: 0.75rem;
@@ -142,7 +142,7 @@ input:focus, textarea:focus {
   box-shadow: 0 0 0 3px rgba(168, 85, 247, 0.1);
 }
 
-/* Card styles - glassmorphism effect like Blendizzard */
+/* Card styles - glassmorphism effect like Ohloss */
 .card {
   background: rgba(255, 255, 255, 0.7);
   backdrop-filter: blur(24px);
@@ -184,7 +184,7 @@ input:focus, textarea:focus {
   font-weight: 600;
 }
 
-/* Game card styles - matching Blendizzard */
+/* Game card styles - matching Ohloss */
 .game-card {
   background: white;
   border-radius: 1.5rem;

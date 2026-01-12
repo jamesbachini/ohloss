@@ -17,7 +17,7 @@ import { existsSync } from "fs";
 import { readEnvFile, getEnvValue } from "./utils/env";
 import { getWorkspaceContracts } from "./utils/contracts";
 
-console.log("🎮 Blendizzard Game Studio Setup\n");
+console.log("🎮 OHLOSS Game Studio Setup\n");
 console.log("This will:");
 console.log("  1. Build Soroban contracts");
 console.log("  2. Deploy to Stellar testnet");
@@ -76,7 +76,7 @@ if (existsSync('deployment.json')) {
     Object.assign(contractIds, deploymentInfo.contracts);
   } else {
     // Backwards compatible fallback
-    if (deploymentInfo?.mockBlendizzardId) contractIds["mock-blendizzard"] = deploymentInfo.mockBlendizzardId;
+    if (deploymentInfo?.mockOhlossId) contractIds["mock-ohloss"] = deploymentInfo.mockOhlossId;
     if (deploymentInfo?.twentyOneId) contractIds["twenty-one"] = deploymentInfo.twentyOneId;
     if (deploymentInfo?.numberGuessId) contractIds["number-guess"] = deploymentInfo.numberGuessId;
   }

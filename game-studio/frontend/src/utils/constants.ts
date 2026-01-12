@@ -36,7 +36,7 @@ export function getAllContractIds(): Record<string, string> {
 }
 
 // Contract IDs (backwards-compatible named exports for built-in games)
-export const MOCK_BLENDIZZARD_CONTRACT = getContractId('mock-blendizzard');
+export const MOCK_OHLOSS_CONTRACT = getContractId('mock-ohloss');
 export const TWENTY_ONE_CONTRACT = getContractId('twenty-one');
 export const NUMBER_GUESS_CONTRACT = getContractId('number-guess');
 

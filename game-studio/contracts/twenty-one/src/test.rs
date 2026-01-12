@@ -1,25 +1,25 @@
 #![cfg(test)]
 
-// Unit tests for the twenty-one contract using a simple mock Blendizzard.
-// These tests verify game logic independently of the full Blendizzard system.
+// Unit tests for the twenty-one contract using a simple mock Ohloss.
+// These tests verify game logic independently of the full Ohloss system.
 //
 // Note: These tests use a minimal mock for isolation and speed.
-// For full integration tests with the real Blendizzard contract, see:
-// contracts/blendizzard/src/tests/twenty_one_integration.rs
+// For full integration tests with the real Ohloss contract, see:
+// contracts/ohloss/src/tests/twenty_one_integration.rs
 
 use crate::{Error, TwentyOneContract, TwentyOneContractClient};
 use soroban_sdk::testutils::{Address as _, Ledger as _};
 use soroban_sdk::{contract, contractimpl, Address, Bytes, BytesN, Env};
 
 // ============================================================================
-// Mock Blendizzard for Unit Testing
+// Mock Ohloss for Unit Testing
 // ============================================================================
 
 #[contract]
-pub struct MockBlendizzard;
+pub struct MockOhloss;
 
 #[contractimpl]
-impl MockBlendizzard {
+impl MockOhloss {
     pub fn start_game(
         _env: Env,
         _game_id: Address,
@@ -48,7 +48,7 @@ impl MockBlendizzard {
 fn setup_test() -> (
     Env,
     TwentyOneContractClient<'static>,
-    MockBlendizzardClient<'static>,
+    MockOhlossClient<'static>,
     Address,
     Address,
 ) {
@@ -67,24 +67,24 @@ fn setup_test() -> (
         max_entry_ttl: u32::MAX / 2,
     });
 
-    // Deploy mock Blendizzard contract
-    let blendizzard_addr = env.register(MockBlendizzard, ());
-    let blendizzard = MockBlendizzardClient::new(&env, &blendizzard_addr);
+    // Deploy mock Ohloss contract
+    let ohloss_addr = env.register(MockOhloss, ());
+    let ohloss = MockOhlossClient::new(&env, &ohloss_addr);
 
     // Create admin address
     let admin = Address::generate(&env);
 
-    // Deploy twenty-one with admin and Blendizzard address
-    let contract_id = env.register(TwentyOneContract, (&admin, &blendizzard_addr));
+    // Deploy twenty-one with admin and Ohloss address
+    let contract_id = env.register(TwentyOneContract, (&admin, &ohloss_addr));
     let client = TwentyOneContractClient::new(&env, &contract_id);
 
     // Register twenty-one as a whitelisted game (mock does nothing)
-    blendizzard.add_game(&contract_id);
+    ohloss.add_game(&contract_id);
 
     let player1 = Address::generate(&env);
     let player2 = Address::generate(&env);
 
-    (env, client, blendizzard, player1, player2)
+    (env, client, ohloss, player1, player2)
 }
 
 /// Assert that a Result contains a specific twenty-one error
@@ -157,7 +157,7 @@ fn calculate_hand_value_helper(hand: &Bytes) -> u32 {
 
 #[test]
 fn test_complete_game_simple() {
-    let (_env, client, _blendizzard, player1, player2) = setup_test();
+    let (_env, client, _ohloss, player1, player2) = setup_test();
 
     let session_id = 1u32;
     let wager = 100_0000000;
@@ -193,7 +193,7 @@ fn test_complete_game_simple() {
 
 #[test]
 fn test_initial_cards_dealt() {
-    let (_env, client, _blendizzard, player1, player2) = setup_test();
+    let (_env, client, _ohloss, player1, player2) = setup_test();
 
     let session_id = 2u32;
     client.start_game(&session_id, &player1, &player2, &100_0000000, &100_0000000);
@@ -217,7 +217,7 @@ fn test_initial_cards_dealt() {
 
 #[test]
 fn test_get_hand_value() {
-    let (_env, client, _blendizzard, player1, player2) = setup_test();
+    let (_env, client, _ohloss, player1, player2) = setup_test();
 
     let session_id = 3u32;
     client.start_game(&session_id, &player1, &player2, &100_0000000, &100_0000000);
@@ -241,7 +241,7 @@ fn test_get_hand_value() {
 
 #[test]
 fn test_hit_adds_card() {
-    let (_env, client, _blendizzard, player1, player2) = setup_test();
+    let (_env, client, _ohloss, player1, player2) = setup_test();
 
     let session_id = 4u32;
     client.start_game(&session_id, &player1, &player2, &100_0000000, &100_0000000);
@@ -258,7 +258,7 @@ fn test_hit_adds_card() {
 
 #[test]
 fn test_stick_prevents_further_hits() {
-    let (_env, client, _blendizzard, player1, player2) = setup_test();
+    let (_env, client, _ohloss, player1, player2) = setup_test();
 
     let session_id = 5u32;
     client.start_game(&session_id, &player1, &player2, &100_0000000, &100_0000000);
@@ -273,7 +273,7 @@ fn test_stick_prevents_further_hits() {
 
 #[test]
 fn test_multiple_hits_allowed() {
-    let (_env, client, _blendizzard, player1, player2) = setup_test();
+    let (_env, client, _ohloss, player1, player2) = setup_test();
 
     let session_id = 6u32;
     client.start_game(&session_id, &player1, &player2, &100_0000000, &100_0000000);
@@ -305,7 +305,7 @@ fn test_multiple_hits_allowed() {
 
 #[test]
 fn test_closer_to_21_wins() {
-    let (_env, client, _blendizzard, player1, player2) = setup_test();
+    let (_env, client, _ohloss, player1, player2) = setup_test();
 
     let session_id = 7u32;
     client.start_game(&session_id, &player1, &player2, &100_0000000, &100_0000000);
@@ -332,7 +332,7 @@ fn test_closer_to_21_wins() {
 
 #[test]
 fn test_reveal_winner_requires_both_stuck() {
-    let (_env, client, _blendizzard, player1, player2) = setup_test();
+    let (_env, client, _ohloss, player1, player2) = setup_test();
 
     let session_id = 8u32;
     client.start_game(&session_id, &player1, &player2, &100_0000000, &100_0000000);
@@ -351,7 +351,7 @@ fn test_reveal_winner_requires_both_stuck() {
 
 #[test]
 fn test_bust_detection() {
-    let (_env, client, _blendizzard, player1, player2) = setup_test();
+    let (_env, client, _ohloss, player1, player2) = setup_test();
 
     let session_id = 9u32;
     client.start_game(&session_id, &player1, &player2, &100_0000000, &100_0000000);
@@ -381,7 +381,7 @@ fn test_bust_detection() {
 
 #[test]
 fn test_cannot_hit_after_bust() {
-    let (_env, client, _blendizzard, player1, player2) = setup_test();
+    let (_env, client, _ohloss, player1, player2) = setup_test();
 
     let session_id = 10u32;
     client.start_game(&session_id, &player1, &player2, &100_0000000, &100_0000000);
@@ -413,7 +413,7 @@ fn test_cannot_hit_after_bust() {
 
 #[test]
 fn test_draw_starts_new_round() {
-    let (_env, client, _blendizzard, player1, player2) = setup_test();
+    let (_env, client, _ohloss, player1, player2) = setup_test();
 
     let session_id = 11u32;
     client.start_game(&session_id, &player1, &player2, &100_0000000, &100_0000000);
@@ -449,7 +449,7 @@ fn test_draw_starts_new_round() {
 
 #[test]
 fn test_cannot_stick_twice() {
-    let (_env, client, _blendizzard, player1, player2) = setup_test();
+    let (_env, client, _ohloss, player1, player2) = setup_test();
 
     let session_id = 12u32;
     client.start_game(&session_id, &player1, &player2, &100_0000000, &100_0000000);
@@ -464,7 +464,7 @@ fn test_cannot_stick_twice() {
 
 #[test]
 fn test_non_player_cannot_hit() {
-    let (env, client, _blendizzard, player1, player2) = setup_test();
+    let (env, client, _ohloss, player1, player2) = setup_test();
     let non_player = Address::generate(&env);
 
     let session_id = 13u32;
@@ -477,7 +477,7 @@ fn test_non_player_cannot_hit() {
 
 #[test]
 fn test_non_player_cannot_stick() {
-    let (env, client, _blendizzard, player1, player2) = setup_test();
+    let (env, client, _ohloss, player1, player2) = setup_test();
     let non_player = Address::generate(&env);
 
     let session_id = 14u32;
@@ -490,7 +490,7 @@ fn test_non_player_cannot_stick() {
 
 #[test]
 fn test_non_player_cannot_get_hand_value() {
-    let (env, client, _blendizzard, player1, player2) = setup_test();
+    let (env, client, _ohloss, player1, player2) = setup_test();
     let non_player = Address::generate(&env);
 
     let session_id = 15u32;
@@ -503,7 +503,7 @@ fn test_non_player_cannot_get_hand_value() {
 
 #[test]
 fn test_cannot_hit_nonexistent_game() {
-    let (_env, client, _blendizzard, player1, _player2) = setup_test();
+    let (_env, client, _ohloss, player1, _player2) = setup_test();
 
     let result = client.try_hit(&999, &player1);
     assert_twenty_one_error(&result, Error::GameNotFound);
@@ -511,7 +511,7 @@ fn test_cannot_hit_nonexistent_game() {
 
 #[test]
 fn test_cannot_stick_nonexistent_game() {
-    let (_env, client, _blendizzard, player1, _player2) = setup_test();
+    let (_env, client, _ohloss, player1, _player2) = setup_test();
 
     let result = client.try_stick(&999, &player1);
     assert_twenty_one_error(&result, Error::GameNotFound);
@@ -519,7 +519,7 @@ fn test_cannot_stick_nonexistent_game() {
 
 #[test]
 fn test_cannot_reveal_nonexistent_game() {
-    let (_env, client, _blendizzard, _player1, _player2) = setup_test();
+    let (_env, client, _ohloss, _player1, _player2) = setup_test();
 
     let result = client.try_reveal_winner(&999);
     assert_twenty_one_error(&result, Error::GameNotFound);
@@ -527,7 +527,7 @@ fn test_cannot_reveal_nonexistent_game() {
 
 #[test]
 fn test_cannot_get_nonexistent_game() {
-    let (_env, client, _blendizzard, _player1, _player2) = setup_test();
+    let (_env, client, _ohloss, _player1, _player2) = setup_test();
 
     let result = client.try_get_game(&999);
     assert_twenty_one_error(&result, Error::GameNotFound);
@@ -535,7 +535,7 @@ fn test_cannot_get_nonexistent_game() {
 
 #[test]
 fn test_cannot_hit_after_game_ended() {
-    let (_env, client, _blendizzard, player1, player2) = setup_test();
+    let (_env, client, _ohloss, player1, player2) = setup_test();
 
     let session_id = 16u32;
     client.start_game(&session_id, &player1, &player2, &100_0000000, &100_0000000);
@@ -556,7 +556,7 @@ fn test_cannot_hit_after_game_ended() {
 
 #[test]
 fn test_cannot_stick_after_game_ended() {
-    let (_env, client, _blendizzard, player1, player2) = setup_test();
+    let (_env, client, _ohloss, player1, player2) = setup_test();
 
     let session_id = 17u32;
     client.start_game(&session_id, &player1, &player2, &100_0000000, &100_0000000);
@@ -582,7 +582,7 @@ fn test_cannot_stick_after_game_ended() {
 
 #[test]
 fn test_reveal_winner_idempotent() {
-    let (_env, client, _blendizzard, player1, player2) = setup_test();
+    let (_env, client, _ohloss, player1, player2) = setup_test();
 
     let session_id = 18u32;
     client.start_game(&session_id, &player1, &player2, &100_0000000, &100_0000000);
@@ -607,7 +607,7 @@ fn test_reveal_winner_idempotent() {
 
 #[test]
 fn test_multiple_games_independent() {
-    let (env, client, _blendizzard, player1, player2) = setup_test();
+    let (env, client, _ohloss, player1, player2) = setup_test();
     let player3 = Address::generate(&env);
     let player4 = Address::generate(&env);
 
@@ -646,7 +646,7 @@ fn test_multiple_games_independent() {
 
 #[test]
 fn test_multiple_sessions() {
-    let (env, client, _blendizzard, player1, player2) = setup_test();
+    let (env, client, _ohloss, player1, player2) = setup_test();
     let player3 = Address::generate(&env);
     let player4 = Address::generate(&env);
 
@@ -668,7 +668,7 @@ fn test_multiple_sessions() {
 
 #[test]
 fn test_asymmetric_wagers() {
-    let (_env, client, _blendizzard, player1, player2) = setup_test();
+    let (_env, client, _ohloss, player1, player2) = setup_test();
 
     let session_id = 24u32;
     let wager1 = 200_0000000;
@@ -695,7 +695,7 @@ fn test_asymmetric_wagers() {
 fn test_face_cards_worth_10() {
     // This is a deterministic test of card value logic
     // We can't control what cards are dealt, but we can verify the hand value calculation
-    let (_env, client, _blendizzard, player1, player2) = setup_test();
+    let (_env, client, _ohloss, player1, player2) = setup_test();
 
     let session_id = 25u32;
     client.start_game(&session_id, &player1, &player2, &100_0000000, &100_0000000);
@@ -714,7 +714,7 @@ fn test_face_cards_worth_10() {
 
 #[test]
 fn test_hand_value_calculation() {
-    let (_env, client, _blendizzard, player1, player2) = setup_test();
+    let (_env, client, _ohloss, player1, player2) = setup_test();
 
     let session_id = 26u32;
     client.start_game(&session_id, &player1, &player2, &100_0000000, &100_0000000);
@@ -739,9 +739,9 @@ fn test_get_admin() {
     env.mock_all_auths();
 
     let admin = Address::generate(&env);
-    let blendizzard_addr = env.register(MockBlendizzard, ());
+    let ohloss_addr = env.register(MockOhloss, ());
 
-    let contract_id = env.register(TwentyOneContract, (&admin, &blendizzard_addr));
+    let contract_id = env.register(TwentyOneContract, (&admin, &ohloss_addr));
     let client = TwentyOneContractClient::new(&env, &contract_id);
 
     let retrieved_admin = client.get_admin();
@@ -749,18 +749,18 @@ fn test_get_admin() {
 }
 
 #[test]
-fn test_get_blendizzard() {
+fn test_get_ohloss() {
     let env = Env::default();
     env.mock_all_auths();
 
     let admin = Address::generate(&env);
-    let blendizzard_addr = env.register(MockBlendizzard, ());
+    let ohloss_addr = env.register(MockOhloss, ());
 
-    let contract_id = env.register(TwentyOneContract, (&admin, &blendizzard_addr));
+    let contract_id = env.register(TwentyOneContract, (&admin, &ohloss_addr));
     let client = TwentyOneContractClient::new(&env, &contract_id);
 
-    let retrieved_blendizzard = client.get_blendizzard();
-    assert_eq!(retrieved_blendizzard, blendizzard_addr);
+    let retrieved_ohloss = client.get_ohloss();
+    assert_eq!(retrieved_ohloss, ohloss_addr);
 }
 
 #[test]
@@ -770,9 +770,9 @@ fn test_set_admin() {
 
     let admin = Address::generate(&env);
     let new_admin = Address::generate(&env);
-    let blendizzard_addr = env.register(MockBlendizzard, ());
+    let ohloss_addr = env.register(MockOhloss, ());
 
-    let contract_id = env.register(TwentyOneContract, (&admin, &blendizzard_addr));
+    let contract_id = env.register(TwentyOneContract, (&admin, &ohloss_addr));
     let client = TwentyOneContractClient::new(&env, &contract_id);
 
     // Set new admin
@@ -783,22 +783,22 @@ fn test_set_admin() {
 }
 
 #[test]
-fn test_set_blendizzard() {
+fn test_set_ohloss() {
     let env = Env::default();
     env.mock_all_auths();
 
     let admin = Address::generate(&env);
-    let blendizzard_addr = env.register(MockBlendizzard, ());
-    let new_blendizzard_addr = Address::generate(&env);
+    let ohloss_addr = env.register(MockOhloss, ());
+    let new_ohloss_addr = Address::generate(&env);
 
-    let contract_id = env.register(TwentyOneContract, (&admin, &blendizzard_addr));
+    let contract_id = env.register(TwentyOneContract, (&admin, &ohloss_addr));
     let client = TwentyOneContractClient::new(&env, &contract_id);
 
-    // Set new blendizzard address
-    client.set_blendizzard(&new_blendizzard_addr);
+    // Set new ohloss address
+    client.set_ohloss(&new_ohloss_addr);
 
-    let retrieved_blendizzard = client.get_blendizzard();
-    assert_eq!(retrieved_blendizzard, new_blendizzard_addr);
+    let retrieved_ohloss = client.get_ohloss();
+    assert_eq!(retrieved_ohloss, new_ohloss_addr);
 }
 
 #[test]
@@ -807,9 +807,9 @@ fn test_upgrade_function_exists() {
     env.mock_all_auths();
 
     let admin = Address::generate(&env);
-    let blendizzard_addr = env.register(MockBlendizzard, ());
+    let ohloss_addr = env.register(MockOhloss, ());
 
-    let contract_id = env.register(TwentyOneContract, (&admin, &blendizzard_addr));
+    let contract_id = env.register(TwentyOneContract, (&admin, &ohloss_addr));
     let client = TwentyOneContractClient::new(&env, &contract_id);
 
     // Verify the upgrade function exists and can be called
@@ -827,7 +827,7 @@ fn test_upgrade_function_exists() {
 
 #[test]
 fn test_deterministic_card_dealing() {
-    let (_env, client, _blendizzard, player1, player2) = setup_test();
+    let (_env, client, _ohloss, player1, player2) = setup_test();
 
     let session_id = 27u32;
 
@@ -836,7 +836,7 @@ fn test_deterministic_card_dealing() {
     let game1 = client.get_game(&session_id);
 
     // Start second game with same session_id in new environment (should be identical)
-    let (_env2, client2, _blendizzard2, player1_2, player2_2) = setup_test();
+    let (_env2, client2, _ohloss2, player1_2, player2_2) = setup_test();
     client2.start_game(&session_id, &player1_2, &player2_2, &100_0000000, &100_0000000);
     let game2 = client2.get_game(&session_id);
 
@@ -848,7 +848,7 @@ fn test_deterministic_card_dealing() {
 
 #[test]
 fn test_round_counter() {
-    let (_env, client, _blendizzard, player1, player2) = setup_test();
+    let (_env, client, _ohloss, player1, player2) = setup_test();
 
     let session_id = 28u32;
     client.start_game(&session_id, &player1, &player2, &100_0000000, &100_0000000);
@@ -863,7 +863,7 @@ fn test_round_counter() {
 
 #[test]
 fn test_cannot_play_against_self() {
-    let (_env, client, _blendizzard, player1, _player2) = setup_test();
+    let (_env, client, _ohloss, player1, _player2) = setup_test();
 
     let session_id = 29u32;
     // Try to start game where player1 plays against themselves

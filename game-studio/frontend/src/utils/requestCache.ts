@@ -1,6 +1,6 @@
 /**
  * Request caching utility to prevent duplicate calls
- * Based on Blendizzard's requestCache implementation
+ * Based on Ohloss's requestCache implementation
  */
 
 interface CacheEntry<T> {

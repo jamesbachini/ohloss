@@ -6,19 +6,19 @@
 //! Each player is dealt 2 cards and can choose to "hit" (draw another card) or "stick" (end their turn).
 //! Cards are valued 1-13 where Ace=1, 2-10=face value, Jack/Queen/King=10.
 //!
-//! **Blendizzard Integration:**
-//! This game is Blendizzard-aware and enforces all games to be played through the
-//! Blendizzard contract. Games cannot be started or completed without FP involvement.
+//! **Ohloss Integration:**
+//! This game is Ohloss-aware and enforces all games to be played through the
+//! Ohloss contract. Games cannot be started or completed without FP involvement.
 
 use soroban_sdk::{
     Address, Bytes, BytesN, Env, IntoVal, contract, contractclient, contracterror,
     contractimpl, contracttype, vec
 };
 
-// Import Blendizzard contract interface
-// This allows us to call into the Blendizzard contract
-#[contractclient(name = "BlendizzardClient")]
-pub trait Blendizzard {
+// Import Ohloss contract interface
+// This allows us to call into the Ohloss contract
+#[contractclient(name = "OhlossClient")]
+pub trait Ohloss {
     fn start_game(
         env: Env,
         game_id: Address,
@@ -57,11 +57,11 @@ pub enum Error {
 // Events (REMOVED)
 // ============================================================================
 //
-// All events have been removed to avoid duplication with Blendizzard events.
-// Game lifecycle is tracked through Blendizzard's GameStarted and GameEnded events.
+// All events have been removed to avoid duplication with Ohloss events.
+// Game lifecycle is tracked through Ohloss's GameStarted and GameEnded events.
 // Game-specific state (hands, scores) can be queried via get_game().
 //
-// This keeps the event stream clean and makes Blendizzard the single source of
+// This keeps the event stream clean and makes Ohloss the single source of
 // truth for game lifecycle monitoring.
 
 // ============================================================================
@@ -87,7 +87,7 @@ pub struct Game {
 #[derive(Clone)]
 pub enum DataKey {
     Game(u32),
-    BlendizzardAddress,
+    OhlossAddress,
     Admin,
 }
 
@@ -143,25 +143,25 @@ pub struct TwentyOneContract;
 
 #[contractimpl]
 impl TwentyOneContract {
-    /// Initialize the contract with Blendizzard address and admin
+    /// Initialize the contract with Ohloss address and admin
     ///
     /// # Arguments
     /// * `admin` - Admin address (can upgrade contract)
-    /// * `blendizzard` - Address of the Blendizzard contract
-    pub fn __constructor(env: Env, admin: Address, blendizzard: Address) {
-        // Store admin and Blendizzard address
+    /// * `ohloss` - Address of the Ohloss contract
+    pub fn __constructor(env: Env, admin: Address, ohloss: Address) {
+        // Store admin and Ohloss address
         env.storage().instance().set(&DataKey::Admin, &admin);
         env.storage()
             .instance()
-            .set(&DataKey::BlendizzardAddress, &blendizzard);
+            .set(&DataKey::OhlossAddress, &ohloss);
     }
 
     /// Start a new game between two players with FP wagers.
-    /// This creates a session in Blendizzard and locks FP before starting the game.
+    /// This creates a session in Ohloss and locks FP before starting the game.
     /// Each player is dealt 2 cards to start.
     ///
     /// **CRITICAL:** This method requires authorization from THIS contract (not players).
-    /// Blendizzard will call `game_id.require_auth()` which checks this contract's address.
+    /// Ohloss will call `game_id.require_auth()` which checks this contract's address.
     ///
     /// # Arguments
     /// * `session_id` - Unique session identifier (u32)
@@ -186,19 +186,19 @@ impl TwentyOneContract {
         player1.require_auth_for_args(vec![&env, session_id.into_val(&env), player1_wager.into_val(&env)]);
         player2.require_auth_for_args(vec![&env, session_id.into_val(&env), player2_wager.into_val(&env)]);
 
-        // Get Blendizzard address
-        let blendizzard_addr: Address = env
+        // Get Ohloss address
+        let ohloss_addr: Address = env
             .storage()
             .instance()
-            .get(&DataKey::BlendizzardAddress)
-            .expect("Blendizzard address not set");
+            .get(&DataKey::OhlossAddress)
+            .expect("Ohloss address not set");
 
-        // Create Blendizzard client
-        let blendizzard = BlendizzardClient::new(&env, &blendizzard_addr);
+        // Create Ohloss client
+        let ohloss = OhlossClient::new(&env, &ohloss_addr);
 
-        // Call Blendizzard to start the session and lock FP
+        // Call Ohloss to start the session and lock FP
         // This requires THIS contract's authorization (env.current_contract_address())
-        blendizzard.start_game(
+        ohloss.start_game(
             &env.current_contract_address(),
             &session_id,
             &player1,
@@ -266,7 +266,7 @@ impl TwentyOneContract {
             .temporary()
             .extend_ttl(&game_key, GAME_TTL_LEDGERS, GAME_TTL_LEDGERS);
 
-        // Event emitted by Blendizzard contract (GameStarted)
+        // Event emitted by Ohloss contract (GameStarted)
 
         Ok(())
     }
@@ -334,10 +334,10 @@ impl TwentyOneContract {
             let hand_value = calculate_hand_value(&game.player1_hand)?;
             if hand_value > 21 {
                 // Player 1 busted, player 2 wins
-                // Call Blendizzard FIRST (before setting winner)
-                Self::end_game_with_blendizzard(&env, session_id, false)?;
+                // Call Ohloss FIRST (before setting winner)
+                Self::end_game_with_ohloss(&env, session_id, false)?;
 
-                // Only set winner AFTER Blendizzard succeeds
+                // Only set winner AFTER Ohloss succeeds
                 game.winner = Some(game.player2.clone());
                 env.storage().temporary().set(&key, &game);
 
@@ -351,10 +351,10 @@ impl TwentyOneContract {
             let hand_value = calculate_hand_value(&game.player2_hand)?;
             if hand_value > 21 {
                 // Player 2 busted, player 1 wins
-                // Call Blendizzard FIRST (before setting winner)
-                Self::end_game_with_blendizzard(&env, session_id, true)?;
+                // Call Ohloss FIRST (before setting winner)
+                Self::end_game_with_ohloss(&env, session_id, true)?;
 
-                // Only set winner AFTER Blendizzard succeeds
+                // Only set winner AFTER Ohloss succeeds
                 game.winner = Some(game.player1.clone());
                 env.storage().temporary().set(&key, &game);
 
@@ -412,7 +412,7 @@ impl TwentyOneContract {
         Ok(())
     }
 
-    /// Reveal the winner of the game and submit outcome to Blendizzard.
+    /// Reveal the winner of the game and submit outcome to Ohloss.
     /// Can only be called after both players have stuck.
     /// This calculates hand values, determines the winner (closest to 21),
     /// and handles draws by dealing new hands.
@@ -497,11 +497,11 @@ impl TwentyOneContract {
             return Err(Error::Draw);
         };
 
-        // Call Blendizzard FIRST (before setting winner)
+        // Call Ohloss FIRST (before setting winner)
         let player1_won = winner == game.player1;
-        Self::end_game_with_blendizzard(&env, session_id, player1_won)?;
+        Self::end_game_with_ohloss(&env, session_id, player1_won)?;
 
-        // Only update game with winner AFTER Blendizzard succeeds
+        // Only update game with winner AFTER Ohloss succeeds
         game.winner = Some(winner.clone());
         env.storage().temporary().set(&key, &game);
 
@@ -552,22 +552,22 @@ impl TwentyOneContract {
     // Internal Helper Functions
     // ========================================================================
 
-    /// Helper to end game with Blendizzard
-    fn end_game_with_blendizzard(env: &Env, session_id: u32, player1_won: bool) -> Result<(), Error> {
-        // Get Blendizzard address
-        let blendizzard_addr: Address = env
+    /// Helper to end game with Ohloss
+    fn end_game_with_ohloss(env: &Env, session_id: u32, player1_won: bool) -> Result<(), Error> {
+        // Get Ohloss address
+        let ohloss_addr: Address = env
             .storage()
             .instance()
-            .get(&DataKey::BlendizzardAddress)
-            .expect("Blendizzard address not set");
+            .get(&DataKey::OhlossAddress)
+            .expect("Ohloss address not set");
 
-        // Create Blendizzard client
-        let blendizzard = BlendizzardClient::new(env, &blendizzard_addr);
+        // Create Ohloss client
+        let ohloss = OhlossClient::new(env, &ohloss_addr);
 
-        // Call Blendizzard to end the session
+        // Call Ohloss to end the session
         // This unlocks FP and updates faction standings
-        // Event emitted by Blendizzard contract (GameEnded)
-        blendizzard.end_game(&session_id, &player1_won);
+        // Event emitted by Ohloss contract (GameEnded)
+        ohloss.end_game(&session_id, &player1_won);
 
         Ok(())
     }
@@ -602,22 +602,22 @@ impl TwentyOneContract {
         env.storage().instance().set(&DataKey::Admin, &new_admin);
     }
 
-    /// Get the current Blendizzard contract address
+    /// Get the current Ohloss contract address
     ///
     /// # Returns
-    /// * `Address` - The Blendizzard contract address
-    pub fn get_blendizzard(env: Env) -> Address {
+    /// * `Address` - The Ohloss contract address
+    pub fn get_ohloss(env: Env) -> Address {
         env.storage()
             .instance()
-            .get(&DataKey::BlendizzardAddress)
-            .expect("Blendizzard address not set")
+            .get(&DataKey::OhlossAddress)
+            .expect("Ohloss address not set")
     }
 
-    /// Set a new Blendizzard contract address
+    /// Set a new Ohloss contract address
     ///
     /// # Arguments
-    /// * `new_blendizzard` - The new Blendizzard contract address
-    pub fn set_blendizzard(env: Env, new_blendizzard: Address) {
+    /// * `new_ohloss` - The new Ohloss contract address
+    pub fn set_ohloss(env: Env, new_ohloss: Address) {
         let admin: Address = env
             .storage()
             .instance()
@@ -627,7 +627,7 @@ impl TwentyOneContract {
 
         env.storage()
             .instance()
-            .set(&DataKey::BlendizzardAddress, &new_blendizzard);
+            .set(&DataKey::OhlossAddress, &new_ohloss);
     }
 
     /// Update the contract WASM hash (upgrade contract)

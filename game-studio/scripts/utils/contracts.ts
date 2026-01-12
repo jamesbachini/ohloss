@@ -8,7 +8,7 @@ export type ContractInfo = {
   wasmPath: string;
   envKey: string;
   bindingsOutDir: string;
-  isMockBlendizzard: boolean;
+  isMockOhloss: boolean;
 };
 
 function toWasmName(packageName: string): string {
@@ -58,13 +58,13 @@ export async function getWorkspaceContracts(): Promise<ContractInfo[]> {
       wasmPath: `target/wasm32v1-none/release/${wasmName}.wasm`,
       envKey,
       bindingsOutDir: `bindings/${wasmName}`,
-      isMockBlendizzard: packageName === "mock-blendizzard" || wasmName === "mock_blendizzard",
+      isMockOhloss: packageName === "mock-ohloss" || wasmName === "mock_ohloss",
     });
   }
 
   infos.sort((a, b) => {
-    if (a.isMockBlendizzard && !b.isMockBlendizzard) return -1;
-    if (!a.isMockBlendizzard && b.isMockBlendizzard) return 1;
+    if (a.isMockOhloss && !b.isMockOhloss) return -1;
+    if (!a.isMockOhloss && b.isMockOhloss) return 1;
     return a.packageName.localeCompare(b.packageName);
   });
 

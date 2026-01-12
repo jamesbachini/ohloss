@@ -24,7 +24,7 @@ export function Layout({ children }: LayoutProps) {
           <div className="header-left">
             <div className="header-brand">
               <h1 className="header-title">
-                <span className="gradient-text">Blendizzard Game Studio</span>
+                <span className="gradient-text">OHLOSS Game Studio</span>
               </h1>
               <p className="header-subtitle">Build Zero-Loss Games On Stellar</p>
             </div>
@@ -93,12 +93,12 @@ export function Layout({ children }: LayoutProps) {
             <nav className="sidebar-nav">
               <button
                 className="nav-item external"
-                onClick={() => handleExternalLink('https://github.com/kalepail/blendizzard')}
+                onClick={() => handleExternalLink('https://github.com/kalepail/ohloss')}
               >
                 <span className="nav-icon" aria-hidden="true">
                   <Github size={18} />
                 </span>
-                <span className="nav-label">Blendizzard</span>
+                <span className="nav-label">OHLOSS</span>
                 <span className="external-icon" aria-hidden="true">
                   <ExternalLink size={16} />
                 </span>

@@ -171,26 +171,26 @@ const adminAddress = walletAddresses.admin;
 const deployed: Record<string, string> = {};
 
 // Deploy mock first so we can pass it into game constructors
-const mock = contracts.find((c) => c.isMockBlendizzard);
+const mock = contracts.find((c) => c.isMockOhloss);
 if (!mock) {
-  console.error("❌ Error: mock-blendizzard contract not found in workspace members");
+  console.error("❌ Error: mock-ohloss contract not found in workspace members");
   process.exit(1);
 }
 
 console.log(`Deploying ${mock.packageName}...`);
-let mockBlendizzardId = "";
+let mockOhlossId = "";
 try {
   const result = await $`stellar contract deploy --wasm ${mock.wasmPath} --source admin --network ${NETWORK}`.text();
-  mockBlendizzardId = result.trim();
-  deployed[mock.packageName] = mockBlendizzardId;
-  console.log(`✅ ${mock.packageName} deployed: ${mockBlendizzardId}\n`);
+  mockOhlossId = result.trim();
+  deployed[mock.packageName] = mockOhlossId;
+  console.log(`✅ ${mock.packageName} deployed: ${mockOhlossId}\n`);
 } catch (error) {
   console.error(`❌ Failed to deploy ${mock.packageName}:`, error);
   process.exit(1);
 }
 
 for (const contract of contracts) {
-  if (contract.isMockBlendizzard) continue;
+  if (contract.isMockOhloss) continue;
 
   console.log(`Deploying ${contract.packageName}...`);
   try {
@@ -202,7 +202,7 @@ for (const contract of contracts) {
 
     console.log("  Deploying and initializing...");
     const deployResult =
-      await $`stellar contract deploy --wasm-hash ${wasmHash} --source admin --network ${NETWORK} -- --admin ${adminAddress} --blendizzard ${mockBlendizzardId}`.text();
+      await $`stellar contract deploy --wasm-hash ${wasmHash} --source admin --network ${NETWORK} -- --admin ${adminAddress} --ohloss ${mockOhlossId}`.text();
     const contractId = deployResult.trim();
     deployed[contract.packageName] = contractId;
     console.log(`✅ ${contract.packageName} deployed: ${contractId}\n`);
@@ -223,7 +223,7 @@ const twentyOneId = deployed["twenty-one"] || "";
 const numberGuessId = deployed["number-guess"] || "";
 
 const deploymentInfo = {
-  mockBlendizzardId,
+  mockOhlossId,
   twentyOneId,
   numberGuessId,
   contracts: deployed,
@@ -267,4 +267,4 @@ VITE_DEV_PLAYER2_SECRET=${walletSecrets.player2}
 await Bun.write('.env', envContent + '\n');
 console.log("✅ Wrote secrets to .env (gitignored)");
 
-export { mockBlendizzardId, deployed };
+export { mockOhlossId, deployed };

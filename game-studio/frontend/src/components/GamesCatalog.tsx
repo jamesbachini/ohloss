@@ -52,7 +52,7 @@ export function GamesCatalog() {
           Games Library
         </h2>
         <p className="catalog-description">
-          Choose a game to play or build your own Blendizzard game
+          Choose a game to play or build your own OHLOSS game
         </p>
       </div>
 

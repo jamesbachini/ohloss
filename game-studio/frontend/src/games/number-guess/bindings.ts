@@ -57,7 +57,7 @@ export const Errors = {
   5: {message:"GameAlreadyEnded"}
 }
 
-export type DataKey = {tag: "Game", values: readonly [u32]} | {tag: "BlendizzardAddress", values: void} | {tag: "Admin", values: void};
+export type DataKey = {tag: "Game", values: readonly [u32]} | {tag: "OhlossAddress", values: void} | {tag: "Admin", values: void};
 
 export interface Client {
   /**
@@ -189,10 +189,10 @@ export interface Client {
   /**
    * Construct and simulate a start_game transaction. Returns an `AssembledTransaction` object which will have a `result` field containing the result of the simulation. If this transaction changes contract state, you will need to call `signAndSend()` on the returned object.
    * Start a new game between two players with FP wagers.
-   * This creates a session in Blendizzard and locks FP before starting the game.
+   * This creates a session in Ohloss and locks FP before starting the game.
    * 
    * **CRITICAL:** This method requires authorization from THIS contract (not players).
-   * Blendizzard will call `game_id.require_auth()` which checks this contract's address.
+   * Ohloss will call `game_id.require_auth()` which checks this contract's address.
    * 
    * # Arguments
    * * `session_id` - Unique session identifier (u32)
@@ -220,7 +220,7 @@ export interface Client {
 
   /**
    * Construct and simulate a reveal_winner transaction. Returns an `AssembledTransaction` object which will have a `result` field containing the result of the simulation. If this transaction changes contract state, you will need to call `signAndSend()` on the returned object.
-   * Reveal the winner of the game and submit outcome to Blendizzard.
+   * Reveal the winner of the game and submit outcome to Ohloss.
    * Can only be called after both players have made their guesses.
    * This generates the winning number, determines the winner, and ends the session.
    * 
@@ -248,13 +248,13 @@ export interface Client {
   }) => Promise<AssembledTransaction<Result<string>>>
 
   /**
-   * Construct and simulate a get_blendizzard transaction. Returns an `AssembledTransaction` object which will have a `result` field containing the result of the simulation. If this transaction changes contract state, you will need to call `signAndSend()` on the returned object.
-   * Get the current Blendizzard contract address
+   * Construct and simulate a get_ohloss transaction. Returns an `AssembledTransaction` object which will have a `result` field containing the result of the simulation. If this transaction changes contract state, you will need to call `signAndSend()` on the returned object.
+   * Get the current Ohloss contract address
    * 
    * # Returns
-   * * `Address` - The Blendizzard contract address
+   * * `Address` - The Ohloss contract address
    */
-  get_blendizzard: (options?: {
+  get_ohloss: (options?: {
     /**
      * The fee to pay for the transaction. Default: BASE_FEE
      */
@@ -272,13 +272,13 @@ export interface Client {
   }) => Promise<AssembledTransaction<string>>
 
   /**
-   * Construct and simulate a set_blendizzard transaction. Returns an `AssembledTransaction` object which will have a `result` field containing the result of the simulation. If this transaction changes contract state, you will need to call `signAndSend()` on the returned object.
-   * Set a new Blendizzard contract address
+   * Construct and simulate a set_ohloss transaction. Returns an `AssembledTransaction` object which will have a `result` field containing the result of the simulation. If this transaction changes contract state, you will need to call `signAndSend()` on the returned object.
+   * Set a new Ohloss contract address
    * 
    * # Arguments
-   * * `new_blendizzard` - The new Blendizzard contract address
+   * * `new_ohloss` - The new Ohloss contract address
    */
-  set_blendizzard: ({new_blendizzard}: {new_blendizzard: string}, options?: {
+  set_ohloss: ({new_ohloss}: {new_ohloss: string}, options?: {
     /**
      * The fee to pay for the transaction. Default: BASE_FEE
      */
@@ -299,7 +299,7 @@ export interface Client {
 export class Client extends ContractClient {
   static async deploy<T = Client>(
         /** Constructor/Initialization Args for the contract's `__constructor` method */
-        {admin, blendizzard}: {admin: string, blendizzard: string},
+        {admin, ohloss}: {admin: string, ohloss: string},
     /** Options for initializing a Client as well as for calling a method, with extras specific to deploying. */
     options: MethodOptions &
       Omit<ContractClientOptions, "contractId"> & {
@@ -311,7 +311,7 @@ export class Client extends ContractClient {
         format?: "hex" | "base64";
       }
   ): Promise<AssembledTransaction<T>> {
-    return ContractClient.deploy({admin, blendizzard}, options)
+    return ContractClient.deploy({admin, ohloss}, options)
   }
   constructor(public readonly options: ContractClientOptions) {
     super(
@@ -339,7 +339,7 @@ export class Client extends ContractClient {
         make_guess: this.txFromJSON<Result<void>>,
         start_game: this.txFromJSON<Result<void>>,
         reveal_winner: this.txFromJSON<Result<string>>,
-        get_blendizzard: this.txFromJSON<string>,
-        set_blendizzard: this.txFromJSON<null>
+        get_ohloss: this.txFromJSON<string>,
+        set_ohloss: this.txFromJSON<null>
   }
 }

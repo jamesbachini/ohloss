@@ -11,7 +11,7 @@ export const config = {
   contractIds: getAllContractIds(),
 
   // Backwards-compatible aliases for built-in games
-  mockBlendizzardId: getContractId('mock-blendizzard'),
+  mockOhlossId: getContractId('mock-ohloss'),
   twentyOneId: getContractId('twenty-one'),
   numberGuessId: getContractId('number-guess'),
 

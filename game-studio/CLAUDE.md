@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Blendizzard Game Studio is a starter kit for building Soroban on-chain games that integrate with Blendizzard. It provides a mock Blendizzard contract, two example games (Twenty-One and Number Guess), a React frontend, and automated deployment scripts for Stellar testnet.
+OHLOSS Game Studio is a starter kit for building Soroban on-chain games that integrate with OHLOSS. It provides a mock OHLOSS contract, two example games (Twenty-One and Number Guess), a React frontend, and automated deployment scripts for Stellar testnet.
 
 **Tech Stack:**
 - **Contracts**: Rust with Soroban SDK 23.1.0, compiled to wasm32v1-none
@@ -72,21 +72,21 @@ stellar contract invoke \
 ### Workspace Structure
 
 This is a Cargo workspace with three contract members:
-- `contracts/mock-blendizzard/` - Minimal Blendizzard interface for development
+- `contracts/mock-ohloss/` - Minimal OHLOSS interface for development
 - `contracts/twenty-one/` - Example game contract (Blackjack-style)
 - `contracts/number-guess/` - Example game contract (Guessing game)
 
 Shared dependencies are defined in the workspace root `Cargo.toml`.
 
-### Critical Blendizzard Integration Pattern
+### Critical OHLOSS Integration Pattern
 
 **ALL game contracts MUST follow this integration pattern:**
 
 ```rust
 // 1. Call start_game at the beginning of your game
-fn call_blendizzard_start_game(
+fn call_ohloss_start_game(
     env: &Env,
-    blendizzard: &Address,
+    ohloss: &Address,
     game_id: &Address,
     session_id: u32,
     player1: &Address,
@@ -95,28 +95,28 @@ fn call_blendizzard_start_game(
     player2_wager: i128,
 ) {
     env.invoke_contract(
-        blendizzard,
+        ohloss,
         &Symbol::new(env, "start_game"),
         (game_id, session_id, player1, player2, player1_wager, player2_wager).into_val(env),
     )
 }
 
 // 2. Call end_game when determining the winner
-fn call_blendizzard_end_game(
+fn call_ohloss_end_game(
     env: &Env,
-    blendizzard: &Address,
+    ohloss: &Address,
     session_id: u32,
     player1_won: bool,  // true if player1 won, false if player2 won
 ) {
     env.invoke_contract(
-        blendizzard,
+        ohloss,
         &Symbol::new(env, "end_game"),
         (session_id, player1_won).into_val(env),
     )
 }
 ```
 
-**DO NOT modify this integration interface.** The mock contract during development and the production Blendizzard contract use the same interface.
+**DO NOT modify this integration interface.** The mock contract during development and the production OHLOSS contract use the same interface.
 
 ### Deterministic Randomness Requirement
 
@@ -174,16 +174,16 @@ env.storage().temporary().set(&game_key, &game);
 env.storage().temporary().extend_ttl(&game_key, GAME_TTL, GAME_TTL);
 ```
 
-Use **instance storage** for configuration (admin, blendizzard address).
+Use **instance storage** for configuration (admin, ohloss address).
 
 ### Contract Standard Structure
 
 All game contracts should include:
-1. `__constructor(env: Env, admin: Address, blendizzard: Address)` - Initialization
-2. `start_game(...)` - Start game session (calls Blendizzard)
+1. `__constructor(env: Env, admin: Address, ohloss: Address)` - Initialization
+2. `start_game(...)` - Start game session (calls OHLOSS)
 3. Game-specific methods (make_guess, make_move, etc.)
-4. Winner determination logic (calls Blendizzard end_game)
-5. `get_admin()`, `set_admin()`, `get_blendizzard()`, `set_blendizzard()`
+4. Winner determination logic (calls OHLOSS end_game)
+5. `get_admin()`, `set_admin()`, `get_ohloss()`, `set_ohloss()`
 6. `upgrade(env: Env, new_wasm_hash: BytesN<32>)` - Contract upgrades
 
 ### Deployment Configuration Flow
@@ -197,7 +197,7 @@ All game contracts should include:
 **deployment.json structure:**
 ```json
 {
-  "mockBlendizzardId": "C...",
+  "mockOhlossId": "C...",
   "numberGuessId": "C...",
   "network": "testnet",
   "rpcUrl": "https://soroban-testnet.stellar.org",
@@ -214,7 +214,7 @@ Game components are **self-contained drop-in modules** designed for easy integra
 interface GameProps {
   rpcUrl: string
   networkPassphrase: string
-  mockBlendizzardId: string
+  mockOhlossId: string
   gameContractId: string  // Your game's contract ID
 }
 ```
@@ -235,13 +235,13 @@ Each game lives in `frontend/src/games/[game-name]/` with its own `.tsx` and `.c
 3. **Add to workspace** in root `Cargo.toml`:
    ```toml
    members = [
-     "contracts/mock-blendizzard",
+     "contracts/mock-ohloss",
      "contracts/number-guess",
      "contracts/my-game",  # Add this
    ]
    ```
 
-4. **Preserve Blendizzard integration** - DO NOT modify the `call_blendizzard_start_game` and `call_blendizzard_end_game` functions
+4. **Preserve OHLOSS integration** - DO NOT modify the `call_ohloss_start_game` and `call_ohloss_end_game` functions
 
 5. **Use deterministic randomness** - Follow the pattern in `contracts/number-guess`
 
@@ -263,7 +263,7 @@ Each game lives in `frontend/src/games/[game-name]/` with its own `.tsx` and `.c
 - **Never skip player auth**: Always call `player.require_auth()` for player actions
 - **Validate inputs**: Check ranges, uniqueness, and game state before processing
 - **Handle errors explicitly**: Use an `Error` enum pattern (see the example games)
-- **Test full game flows**: Include tests that verify Blendizzard integration
+- **Test full game flows**: Include tests that verify OHLOSS integration
 
 ## Common Issues
 

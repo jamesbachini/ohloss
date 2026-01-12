@@ -2,13 +2,13 @@
 
 use soroban_sdk::{contract, contractevent, contractimpl, Address, Env};
 
-/// Mock Blendizzard contract for game studio development
+/// Mock Ohloss contract for game studio development
 ///
 /// This contract provides the same external interface that games expect
 /// (start_game, end_game) but does nothing internally. It exists purely
 /// for game contracts to compile and integrate during development.
 #[contract]
-pub struct MockBlendizzard;
+pub struct MockOhloss;
 
 #[contractevent]
 pub struct GameStarted {
@@ -27,7 +27,7 @@ pub struct GameEnded {
 }
 
 #[contractimpl]
-impl MockBlendizzard {
+impl MockOhloss {
     /// Start a game session
     ///
     /// # Arguments
@@ -84,8 +84,8 @@ mod test {
     #[test]
     fn test_start_and_end_game() {
         let env = Env::default();
-        let contract_id = env.register_contract(None, MockBlendizzard);
-        let client = MockBlendizzardClient::new(&env, &contract_id);
+        let contract_id = env.register_contract(None, MockOhloss);
+        let client = MockOhlossClient::new(&env, &contract_id);
         let game_id = Address::generate(&env);
         let player1 = Address::generate(&env);
         let player2 = Address::generate(&env);
