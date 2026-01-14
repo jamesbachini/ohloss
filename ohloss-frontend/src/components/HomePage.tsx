@@ -29,9 +29,9 @@ const ASCII_LOGO = `
 `
 
 const FACTIONS = [
-  { name: 'WHOLE_NOODLE', symbol: '~', description: 'FLEXIBILITY IS STRENGTH' },
-  { name: 'POINTY_STICK', symbol: '/', description: 'PIERCE THE OPPOSITION' },
-  { name: 'SPECIAL_ROCK', symbol: '#', description: 'UNMOVABLE FORCE' },
+  { name: 'GILDED_FIN', symbol: '𓆛', description: 'COURAGE, LUCK, AND A LITTLE CHAOS' },
+  { name: 'VERDANT_HOLLOW', symbol: '𓆣', description: 'PEACE IS OUR PREFERENCE' },
+  { name: 'WOBBLESTONE', symbol: '𓅣', description: 'STONE DOESN\'T BEND' },
 ]
 
 

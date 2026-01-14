@@ -100,7 +100,7 @@ interface OhlossState {
 // =============================================================================
 
 const EPOCHS_TO_FETCH = 100
-const FACTION_NAMES = ['WholeNoodle', 'PointyStick', 'SpecialRock'] as const
+const FACTION_NAMES = ['GildedFin', 'VerdantHollow', 'Wobblestone'] as const
 
 // =============================================================================
 // Store
