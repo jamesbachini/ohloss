@@ -43,22 +43,26 @@ const DiceFace = ({
   tone?: 'red' | 'gold';
 }) => {
   const pipColor = tone === 'gold' ? 'bg-amber-500' : 'bg-rose-600';
+  const pipGlow =
+    tone === 'gold'
+      ? 'shadow-[0_0_10px_rgba(251,191,36,0.55)]'
+      : 'shadow-[0_0_10px_rgba(244,63,94,0.55)]';
   const pips = value ? DICE_PIPS[value] : [];
 
   return (
     <div
-      className={`relative flex items-center justify-center w-16 h-16 sm:w-20 sm:h-20 rounded-2xl border-2 border-white/60 bg-white/90 shadow-[0_10px_30px_rgba(0,0,0,0.2)] ${
+      className={`dice-face relative flex items-center justify-center w-16 h-16 sm:w-20 sm:h-20 rounded-2xl border-2 border-white/60 bg-white/90 shadow-[0_10px_30px_rgba(0,0,0,0.2)] overflow-hidden ${
         rolling ? 'dice-roll' : ''
       }`}
       aria-label={value ? `Dice showing ${value}` : 'Dice'}
     >
       {value === null ? (
-        <span className="text-xl font-black text-gray-700">?</span>
+        <span className="relative z-10 text-xl font-black text-gray-800 drop-shadow-[0_1px_1px_rgba(0,0,0,0.2)]">?</span>
       ) : (
         pips.map(([x, y], index) => (
           <span
             key={`${x}-${y}-${index}`}
-            className={`absolute w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full ${pipColor}`}
+            className={`absolute z-10 w-2.5 h-2.5 sm:w-3.5 sm:h-3.5 rounded-full ${pipColor} ${pipGlow} shadow-[inset_0_1px_2px_rgba(255,255,255,0.4)]`}
             style={{ left: `${x}%`, top: `${y}%`, transform: 'translate(-50%, -50%)' }}
           />
         ))
@@ -99,7 +103,7 @@ export function DiceDuelGame({
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [gamePhase, setGamePhase] = useState<'create' | 'roll' | 'reveal' | 'complete'>('create');
-  const [diceRolling, setDiceRolling] = useState(false);
+  const [rollingPlayer, setRollingPlayer] = useState<'player1' | 'player2' | 'both' | null>(null);
   const [createMode, setCreateMode] = useState<'create' | 'import' | 'load'>('create');
   const [exportedAuthEntryXDR, setExportedAuthEntryXDR] = useState<string | null>(null);
   const [importAuthEntryXDR, setImportAuthEntryXDR] = useState('');
@@ -797,6 +801,11 @@ export function DiceDuelGame({
       setLoading(true);
       setError(null);
       setSuccess(null);
+      if (isPlayer1) {
+        setRollingPlayer('player1');
+      } else if (isPlayer2) {
+        setRollingPlayer('player2');
+      }
 
       const signer = getContractSigner();
       await diceDuelService.roll(sessionId, userAddress, signer);
@@ -807,6 +816,7 @@ export function DiceDuelGame({
       console.error('Roll error:', err);
       setError(err instanceof Error ? err.message : 'Failed to roll');
     } finally {
+      setRollingPlayer(null);
       setLoading(false);
     }
   };
@@ -818,7 +828,7 @@ export function DiceDuelGame({
       setSuccess(null);
 
       const signer = getContractSigner();
-      setDiceRolling(true);
+      setRollingPlayer('both');
       await diceDuelService.revealWinner(sessionId, userAddress, signer);
 
       // Fetch updated on-chain state and derive the winner from it (avoid type mismatches from tx result decoding).
@@ -838,7 +848,7 @@ export function DiceDuelGame({
       console.error('Reveal winner error:', err);
       setError(err instanceof Error ? err.message : 'Failed to reveal winner');
     } finally {
-      setDiceRolling(false);
+      setRollingPlayer(null);
       setLoading(false);
     }
   };
@@ -849,6 +859,8 @@ export function DiceDuelGame({
 
   const player1Dice = [gameState?.player1_die1 ?? null, gameState?.player1_die2 ?? null];
   const player2Dice = [gameState?.player2_die1 ?? null, gameState?.player2_die2 ?? null];
+  const player1Rolling = rollingPlayer === 'player1' || rollingPlayer === 'both';
+  const player2Rolling = rollingPlayer === 'player2' || rollingPlayer === 'both';
   const player1Total = player1Dice.every((die) => die !== null)
     ? Number(player1Dice[0]) + Number(player1Dice[1])
     : null;
@@ -860,14 +872,47 @@ export function DiceDuelGame({
     <div className="min-h-screen relative overflow-hidden bg-gradient-to-br from-[#070b08] via-[#1a0d0d] to-[#07050f] p-6 sm:p-8">
       <style>{`
         @keyframes diceRoll {
-          0% { transform: translateY(0) rotate(0deg); }
-          25% { transform: translateY(-8px) rotate(90deg); }
-          50% { transform: translateY(2px) rotate(180deg); }
-          75% { transform: translateY(-6px) rotate(270deg); }
-          100% { transform: translateY(0) rotate(360deg); }
+          0% { transform: translateY(0) rotateX(0deg) rotateY(0deg) rotateZ(0deg) scale(1); }
+          20% { transform: translateY(-10px) rotateX(120deg) rotateY(140deg) rotateZ(90deg) scale(1.02); }
+          50% { transform: translateY(4px) rotateX(240deg) rotateY(240deg) rotateZ(180deg) scale(1.04); }
+          80% { transform: translateY(-8px) rotateX(320deg) rotateY(320deg) rotateZ(270deg) scale(1.02); }
+          100% { transform: translateY(0) rotateX(360deg) rotateY(360deg) rotateZ(360deg) scale(1); }
         }
         .dice-roll {
-          animation: diceRoll 0.9s ease-in-out infinite;
+          animation: diceRoll 0.75s cubic-bezier(0.35, 0.1, 0.25, 1) infinite;
+          filter: drop-shadow(0 12px 14px rgba(0,0,0,0.25));
+        }
+        .dice-face {
+          position: relative;
+          z-index: 0;
+          transform-style: preserve-3d;
+          background: linear-gradient(145deg, rgba(255,255,255,0.98), rgba(238,238,238,0.92));
+        }
+        .dice-face::before {
+          content: '';
+          position: absolute;
+          inset: 6px;
+          border-radius: 16px;
+          background: linear-gradient(135deg, rgba(255,255,255,0.9), rgba(255,255,255,0.15));
+          box-shadow: inset 0 2px 6px rgba(255,255,255,0.8);
+          z-index: 1;
+          pointer-events: none;
+        }
+        .dice-face::after {
+          content: '';
+          position: absolute;
+          inset: 0;
+          border-radius: 18px;
+          box-shadow: inset 0 6px 12px rgba(255,255,255,0.6), inset 0 -8px 16px rgba(0,0,0,0.12);
+          z-index: 2;
+          pointer-events: none;
+        }
+        .dice-tray {
+          padding: 10px 14px;
+          border-radius: 18px;
+          background: radial-gradient(circle at top, rgba(255,255,255,0.8), rgba(255,255,255,0.55)) , linear-gradient(135deg, rgba(20,83,45,0.08), rgba(153,27,27,0.08));
+          border: 1px solid rgba(255,255,255,0.7);
+          box-shadow: inset 0 3px 12px rgba(0,0,0,0.12), 0 6px 16px rgba(0,0,0,0.08);
         }
         @keyframes neonPulse {
           0%, 100% { text-shadow: 0 0 8px rgba(255, 215, 120, 0.6), 0 0 24px rgba(255, 80, 80, 0.35); }
@@ -885,16 +930,16 @@ export function DiceDuelGame({
       </div>
 
       <div className="relative z-10 max-w-6xl mx-auto">
-        <div className="bg-white/85 backdrop-blur-xl rounded-2xl p-8 shadow-2xl border border-white/40">
+        <div className="bg-gradient-to-br from-[#0b0f17]/90 via-[#121726]/90 to-[#1a1022]/90 backdrop-blur-xl rounded-2xl p-8 shadow-2xl border border-white/10">
           <div className="flex items-center justify-between mb-6">
             <div>
               <h2 className="text-3xl sm:text-4xl font-black bg-gradient-to-r from-amber-300 via-yellow-400 to-rose-400 bg-clip-text text-transparent neon-title">
                 Dice Duel 🎲
               </h2>
-              <p className="text-sm text-gray-700 font-semibold mt-1">
+              <p className="text-sm text-gray-200 font-semibold mt-1">
                 Roll two dice each. Highest total wins. Ties favor Player 1.
               </p>
-              <p className="text-xs text-gray-500 font-mono mt-1">
+              <p className="text-xs text-gray-400 font-mono mt-1">
                 Session ID: {sessionId}
               </p>
             </div>
@@ -903,9 +948,8 @@ export function DiceDuelGame({
                 // If game is complete (has winner), refresh stats before going back
                 if (gameState?.winner) {
                   onGameComplete();
-                } else {
-                  onBack();
                 }
+                onBack();
               }}
               className="px-5 py-3 rounded-xl bg-gradient-to-r from-gray-200 to-gray-300 hover:from-gray-300 hover:to-gray-400 transition-all text-sm font-bold shadow-md hover:shadow-lg transform hover:scale-105"
             >
@@ -1264,9 +1308,9 @@ export function DiceDuelGame({
               <div className="text-xs font-semibold text-gray-600">
                 Wager: {(Number(gameState.player1_wager) / 10000000).toFixed(2)} FP
               </div>
-              <div className="mt-4 flex items-center gap-3">
-                <DiceFace value={gameState.player1_die1 ?? null} tone="gold" rolling={diceRolling} />
-                <DiceFace value={gameState.player1_die2 ?? null} tone="gold" rolling={diceRolling} />
+              <div className="mt-4 flex items-center gap-3 dice-tray">
+                <DiceFace value={gameState.player1_die1 ?? null} tone="gold" rolling={player1Rolling} />
+                <DiceFace value={gameState.player1_die2 ?? null} tone="gold" rolling={player1Rolling} />
                 <div className="text-xs font-bold text-gray-600">
                   {gameState.player1_rolled ? 'Rolled' : 'Waiting'}
                 </div>
@@ -1281,9 +1325,9 @@ export function DiceDuelGame({
               <div className="text-xs font-semibold text-gray-600">
                 Wager: {(Number(gameState.player2_wager) / 10000000).toFixed(2)} FP
               </div>
-              <div className="mt-4 flex items-center gap-3">
-                <DiceFace value={gameState.player2_die1 ?? null} tone="red" rolling={diceRolling} />
-                <DiceFace value={gameState.player2_die2 ?? null} tone="red" rolling={diceRolling} />
+              <div className="mt-4 flex items-center gap-3 dice-tray">
+                <DiceFace value={gameState.player2_die1 ?? null} tone="red" rolling={player2Rolling} />
+                <DiceFace value={gameState.player2_die2 ?? null} tone="red" rolling={player2Rolling} />
                 <div className="text-xs font-bold text-gray-600">
                   {gameState.player2_rolled ? 'Rolled' : 'Waiting'}
                 </div>
@@ -1327,11 +1371,11 @@ export function DiceDuelGame({
             <p className="text-sm font-semibold text-gray-700 mb-6">
               The house is ready. Reveal the dice.
             </p>
-            <div className="flex items-center justify-center gap-4 mb-6">
-              <DiceFace value={gameState.player1_die1 ?? null} tone="gold" rolling={diceRolling} />
-              <DiceFace value={gameState.player1_die2 ?? null} tone="gold" rolling={diceRolling} />
-              <DiceFace value={gameState.player2_die1 ?? null} tone="red" rolling={diceRolling} />
-              <DiceFace value={gameState.player2_die2 ?? null} tone="red" rolling={diceRolling} />
+            <div className="flex items-center justify-center gap-4 mb-6 dice-tray">
+              <DiceFace value={gameState.player1_die1 ?? null} tone="gold" rolling={player1Rolling} />
+              <DiceFace value={gameState.player1_die2 ?? null} tone="gold" rolling={player1Rolling} />
+              <DiceFace value={gameState.player2_die1 ?? null} tone="red" rolling={player2Rolling} />
+              <DiceFace value={gameState.player2_die2 ?? null} tone="red" rolling={player2Rolling} />
             </div>
             <button
               onClick={handleRevealWinner}
@@ -1359,7 +1403,7 @@ export function DiceDuelGame({
                 <p className="font-mono text-xs text-gray-700 mb-3">
                   {gameState.player1.slice(0, 8)}...{gameState.player1.slice(-4)}
                 </p>
-                <div className="flex items-center justify-center gap-3 mb-3">
+                <div className="flex items-center justify-center gap-3 mb-3 dice-tray">
                   <DiceFace value={gameState.player1_die1 ?? null} tone="gold" />
                   <DiceFace value={gameState.player1_die2 ?? null} tone="gold" />
                 </div>
@@ -1373,7 +1417,7 @@ export function DiceDuelGame({
                 <p className="font-mono text-xs text-gray-700 mb-3">
                   {gameState.player2.slice(0, 8)}...{gameState.player2.slice(-4)}
                 </p>
-                <div className="flex items-center justify-center gap-3 mb-3">
+                <div className="flex items-center justify-center gap-3 mb-3 dice-tray">
                   <DiceFace value={gameState.player2_die1 ?? null} tone="red" />
                   <DiceFace value={gameState.player2_die2 ?? null} tone="red" />
                 </div>

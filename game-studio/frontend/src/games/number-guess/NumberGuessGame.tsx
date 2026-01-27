@@ -841,9 +841,8 @@ export function NumberGuessGame({
             // If game is complete (has winner), refresh stats before going back
             if (gameState?.winner) {
               onGameComplete();
-            } else {
-              onBack();
             }
+            onBack();
           }}
           className="px-5 py-3 rounded-xl bg-gradient-to-r from-gray-200 to-gray-300 hover:from-gray-300 hover:to-gray-400 transition-all text-sm font-bold shadow-md hover:shadow-lg transform hover:scale-105"
         >
