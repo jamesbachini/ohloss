@@ -306,7 +306,7 @@ This will:
 - Create `public/ohloss-config.js` for runtime configuration
 
 ### Step 4: Configure Mainnet Contract (Runtime)
-Update `public/ohloss-config.js` in your standalone frontend after you deploy your mainnet contract.
+Open the generated `public/ohloss-config.js` and set mainnet values after you deploy your contract.
 ```js
 window.__OHLOSS_CONFIG__ = {
   rpcUrl: "https://soroban-mainnet.stellar.org",
@@ -323,7 +323,19 @@ This lets you update contract addresses without rebuilding the frontend.
 Note: the standalone frontend uses Stellar Wallets Kit v2 to manage real wallet connections
 (Freighter, etc.). Install a supported wallet extension before testing.
 
-### Step 5: Build and Deploy
+### Step 5: Work With the Standalone Frontend
+```bash
+cd ../my-game
+bun install
+
+# Local dev
+bun run dev
+
+# Production build
+bun run build
+```
+
+### Step 6: Deploy
 ```bash
 bun install
 bun run build
